@@ -89,10 +89,12 @@ tasks {
                     replacement = "version = \"$newVersion\"",
                 )
             println("Version: $version -> $newVersion")
+
             buildFile.writeText(newContent)
+            version = newVersion
         }
     }
-    named(IntelliJPluginConstants.COMPILE_KOTLIN_TASK_NAME) {
+    named(IntelliJPluginConstants.BUILD_PLUGIN_TASK_NAME) {
         dependsOn(":incrementBuild")
     }
 
