@@ -7,7 +7,7 @@ plugins {
 }
 
 group = "ru.alezhu.idea.plugins.named_argument_stubs"
-version = "1.0.0.8"
+version = "1.0.0.20"
 
 repositories {
     mavenCentral()
@@ -45,7 +45,6 @@ tasks {
     buildSearchableOptions {
         enabled = false
     }
-
     jarSearchableOptions {
         enabled = false
     }
@@ -95,9 +94,16 @@ tasks {
 
             buildFile.writeText(newContent)
             version = newVersion
+            project.version = newVersion
+            named(IntelliJPluginConstants.PATCH_PLUGIN_XML_TASK_NAME) {
+                this.setProperty("version", newVersion)
+            }
         }
     }
     named(IntelliJPluginConstants.BUILD_PLUGIN_TASK_NAME) {
+        dependsOn(":incrementBuild")
+    }
+    named(IntelliJPluginConstants.PATCH_PLUGIN_XML_TASK_NAME) {
         dependsOn(":incrementBuild")
     }
 
