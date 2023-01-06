@@ -46,6 +46,9 @@ tasks {
         enabled = false
     }
 
+    jarSearchableOptions {
+        enabled = false
+    }
     signPlugin {
         certificateChain.set(System.getenv("CERTIFICATE_CHAIN"))
         privateKey.set(System.getenv("PRIVATE_KEY"))
