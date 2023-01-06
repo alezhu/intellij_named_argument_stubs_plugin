@@ -16,7 +16,7 @@
          Simple HTML elements (text formatting, paragraphs, and lists) can be added inside of <![CDATA[ ]]> tag.
          Guidelines: https://plugins.jetbrains.com/docs/marketplace/plugin-overview-page.html#plugin-description -->
     <description><![CDATA[
-    Add|Create named arguments for call function and class constructors
+    Add|Create named argument stubs for call function and class constructors
   ]]></description>
 
     <change-notes>
@@ -31,7 +31,7 @@
          Read more: https://plugins.jetbrains.com/docs/intellij/plugin-compatibility.html -->
     <depends>org.jetbrains.kotlin</depends>
     <depends>com.intellij.modules.platform</depends>
-    <depends>com.intellij.modules.androidstudio</depends>
+    <!--    <depends>com.intellij.modules.androidstudio</depends>-->
     <!--    <depends>org.jetbrains.android</depends>-->
     <!-- Extension points defined by the plugin.
          Read more: https://plugins.jetbrains.com/docs/intellij/plugin-extension-points.html -->
