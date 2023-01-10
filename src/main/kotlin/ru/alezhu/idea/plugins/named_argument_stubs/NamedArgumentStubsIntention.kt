@@ -20,7 +20,11 @@ class NamedArgumentStubsIntention : PsiElementBaseIntentionAction(), IntentionAc
     override fun isAvailable(project: Project, editor: Editor?, element: PsiElement): Boolean {
         context = Context(project, element)
         return try {
-            context!!.isAvailable()
+            val available = context!!.isAvailable()
+            if (!available) {
+                context = null
+            }
+            available
         } catch (ex: Throwable) {
             LOG.error(ex)
             false
