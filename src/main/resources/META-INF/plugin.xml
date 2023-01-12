@@ -5,18 +5,18 @@
 
     <!-- Public plugin name should be written in Title Case.
          Guidelines: https://plugins.jetbrains.com/docs/marketplace/plugin-overview-page.html#plugin-name -->
-    <name>Named Argument Stubs</name>
+    <name>Kotlin Named Argument Stubs</name>
 
     <!-- A displayed Vendor name or Organization ID displayed on the Plugins Page. -->
     <vendor email="alexandr.zhuravlev@gmail.com" url="https://github.com/alezhu/intellij_named_argument_stubs_plugin">
-        Alezhu
+        Alexandr Zhuravlev
     </vendor>
 
     <!-- Description of the plugin displayed on the Plugin Page and IDE Plugin Manager.
          Simple HTML elements (text formatting, paragraphs, and lists) can be added inside of <![CDATA[ ]]> tag.
          Guidelines: https://plugins.jetbrains.com/docs/marketplace/plugin-overview-page.html#plugin-description -->
     <description><![CDATA[
-    Add|Create named argument stubs for call function and class constructors
+    Add|Create named argument stubs for call function and class constructors in Kotlin code
   ]]></description>
 
     <change-notes>
