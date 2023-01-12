@@ -4,7 +4,7 @@
     <g transform="matrix(0.25 0 0 0.25 20 500)" id="EcPDt97o7ui960NTc8-Ex">
         <style type="text/css">
             .st0{fill:url(#SVGID_1_);}
-            .st1{fill:#000000;}
+            .st1{fill:#FFFFFF;}
         </style>
         <g id="Logotypes_1_">
             <g>
@@ -53,7 +53,7 @@
                 fill: rgb(179,181,179);
             }
             .st3 {
-                fill: rgb(255,255,255);
+                fill: #3C3C3C;
             }
         </style>
         <filter id="SVGID_37" y="-25%" height="150%" x="-25%" width="150%">
