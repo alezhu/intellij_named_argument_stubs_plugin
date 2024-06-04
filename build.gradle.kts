@@ -7,7 +7,7 @@ plugins {
 }
 
 group = "ru.alezhu.idea.plugins.named_argument_stubs"
-version = "1.0.2.34"
+version = "1.0.3.37"
 
 repositories {
     mavenCentral()
