@@ -22,6 +22,7 @@
     <change-notes>
         <![CDATA[
       <ul>
+        <li>1.0.3 - <b>Adapt to IntelliJ Platform 242.*</li>
         <li><b>Initial release</li>
       </ul>
     ]]>

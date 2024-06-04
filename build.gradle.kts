@@ -39,7 +39,7 @@ tasks {
     patchPluginXml {
         version.set("${project.version}")
         sinceBuild.set("213")
-        untilBuild.set("233.*")
+        untilBuild.set("242.*")
     }
 
     buildSearchableOptions {
