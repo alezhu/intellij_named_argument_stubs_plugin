@@ -30,10 +30,10 @@
 
     <!-- Product and plugin compatibility requirements.
          Read more: https://plugins.jetbrains.com/docs/intellij/plugin-compatibility.html -->
-    <depends>org.jetbrains.kotlin</depends>
+    <depends>com.intellij.java</depends>
+    <depends>com.intellij.modules.lang</depends>
     <depends>com.intellij.modules.platform</depends>
-    <!--    <depends>com.intellij.modules.androidstudio</depends>-->
-    <!--    <depends>org.jetbrains.android</depends>-->
+    <depends>org.jetbrains.kotlin</depends>
     <!-- Extension points defined by the plugin.
          Read more: https://plugins.jetbrains.com/docs/intellij/plugin-extension-points.html -->
     <extensions defaultExtensionNs="com.intellij">
