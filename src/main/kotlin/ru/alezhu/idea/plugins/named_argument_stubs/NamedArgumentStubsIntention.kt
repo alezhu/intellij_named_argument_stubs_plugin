@@ -15,7 +15,7 @@ class NamedArgumentStubsIntention : PsiElementBaseIntentionAction(), IntentionAc
 
     private var context: Context? = null
 
-    override fun getFamilyName(): String = "NamedArgumentStubsIntention"
+    override fun getFamilyName(): String = "Add named argument stubs for all parameters"
 
     override fun isAvailable(project: Project, editor: Editor?, element: PsiElement): Boolean {
         context = Context(project, element)
