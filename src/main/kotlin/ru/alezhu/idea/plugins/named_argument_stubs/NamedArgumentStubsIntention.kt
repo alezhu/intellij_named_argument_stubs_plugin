@@ -4,6 +4,7 @@ import com.intellij.codeInsight.intention.IntentionAction
 import com.intellij.codeInsight.intention.PsiElementBaseIntentionAction
 import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.editor.Editor
+import com.intellij.openapi.progress.ProcessCanceledException
 import com.intellij.openapi.project.Project
 import com.intellij.psi.PsiElement
 import com.intellij.psi.util.PsiTreeUtil
@@ -25,6 +26,8 @@ class NamedArgumentStubsIntention : PsiElementBaseIntentionAction(), IntentionAc
                 context = null
             }
             available
+        } catch (ignore: ProcessCanceledException) {
+            false
         } catch (ex: Throwable) {
             LOG.error(ex)
             false
@@ -38,7 +41,7 @@ class NamedArgumentStubsIntention : PsiElementBaseIntentionAction(), IntentionAc
             context!!.process()
         } catch (ex: Throwable) {
             LOG.error(ex)
-            throw ex
+            //throw ex
         } finally {
             context = null
         }
