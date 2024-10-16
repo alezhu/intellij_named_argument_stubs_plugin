@@ -5,14 +5,20 @@ import com.intellij.psi.PsiElement
 import com.intellij.psi.PsiPolyVariantReference
 import com.intellij.psi.PsiReference
 import com.intellij.psi.util.PsiTreeUtil
-import org.jetbrains.kotlin.psi.*
+import org.jetbrains.kotlin.psi.KtCallExpression
+import org.jetbrains.kotlin.psi.KtNameReferenceExpression
+import org.jetbrains.kotlin.psi.KtParameter
+import org.jetbrains.kotlin.psi.KtParameterList
+import org.jetbrains.kotlin.psi.KtPsiFactory
+import org.jetbrains.kotlin.psi.KtValueArgument
+
 
 class Context(
     private val project: Project,
     private val currentElement: PsiElement
 ) {
     private val referenceElement: PsiElement? by lazy {
-        PsiTreeUtil.getParentOfType(currentElement, KtNameReferenceExpression::class.java)
+        PsiTreeUtil.getParentOfType<PsiElement>(currentElement, KtNameReferenceExpression::class.java)
     }
 
     private val reference: PsiReference? by lazy {
@@ -34,11 +40,7 @@ class Context(
 
     private val callExpression: KtCallExpression? by lazy {
         val refParent = reference?.element?.parent
-        if (refParent is KtCallExpression) {
-            refParent
-        } else {
-            null
-        }
+        refParent as? KtCallExpression
     }
 
     private val parameterList: List<KtParameter>? by lazy {
@@ -57,7 +59,7 @@ class Context(
     private val namedArguments: HashMap<String, KtValueArgument> by lazy {
         val namedArguments = HashMap<String, KtValueArgument>()
         arguments?.forEach { argument ->
-            if (argument.isNamed()) {
+            if (argument.isNamed) {
                 val name = argument.getArgumentName()!!.asName.identifier
                 namedArguments[name] = argument
             }

@@ -1,0 +1,33 @@
+fun testFun(
+    id: Int,
+    name: String,
+    value: Double = 0.0
+): Boolean = false
+
+class Test(
+    val id: Int,
+    val name: String,
+    val value: Double = 0.0
+)
+
+val testObj1 = Test(
+    id = 1,
+    name = getName(),
+    value = 2.0,
+)
+val testObj2 = Test(
+    id = 2,
+    name = getName(),
+    value = 0.0,
+)
+
+val test1 = testFun(
+    id = 1,
+    name = "2",
+    value = 0.0,
+)
+val test3 = testFun(
+    id = 1,
+    name = "2",
+    value = 3.0 / 4,
+)
