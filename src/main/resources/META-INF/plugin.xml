@@ -39,7 +39,7 @@
     <extensions defaultExtensionNs="com.intellij">
         <intentionAction>
             <className>ru.alezhu.idea.plugins.named_argument_stubs.NamedArgumentStubsIntention</className>
-            <category>Method intentions</category>
+            <category>Kotlin</category>
         </intentionAction>
     </extensions>
 </idea-plugin>
