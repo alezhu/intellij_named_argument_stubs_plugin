@@ -7,7 +7,6 @@ import com.intellij.openapi.editor.Editor
 import com.intellij.openapi.progress.ProcessCanceledException
 import com.intellij.openapi.project.Project
 import com.intellij.psi.PsiElement
-import com.intellij.psi.util.PsiTreeUtil
 
 class NamedArgumentStubsIntention : PsiElementBaseIntentionAction(), IntentionAction {
     init {
@@ -48,7 +47,7 @@ class NamedArgumentStubsIntention : PsiElementBaseIntentionAction(), IntentionAc
     }
 
     companion object {
-        private val LOG = Logger.getInstance(PsiTreeUtil::class.java)
+        private val LOG = Logger.getInstance(this::class.java)
     }
 
 }
