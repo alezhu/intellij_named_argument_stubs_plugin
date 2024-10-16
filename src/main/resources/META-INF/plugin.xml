@@ -40,6 +40,7 @@
         <intentionAction>
             <className>ru.alezhu.idea.plugins.named_argument_stubs.NamedArgumentStubsIntention</className>
             <category>Kotlin</category>
+            <language>kotlin</language>
         </intentionAction>
     </extensions>
 </idea-plugin>
