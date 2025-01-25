@@ -14,7 +14,7 @@ plugins {
 }
 
 group = properties("pluginGroup").get()
-version = "1.0.4.104"
+version = "1.0.5.131"
 val jvmVersion = "17"
 val platformVersion = properties("platformVersion")
 val platformType = properties("platformType")
@@ -46,13 +46,13 @@ dependencies {
         plugins(providers.gradleProperty("platformPlugins").map(parser))
         bundledPlugins(providers.gradleProperty("platformBundledPlugins").map(parser))
 
-        instrumentationTools()
+//        instrumentationTools()
         pluginVerifier()
     }
 }
 
 // Configure Gradle IntelliJ Plugin
-// Read more: https://plugins.jetbrains.com/docs/intellij/tools-gradle-intellij-plugin.html
+// Read more: https://plugins.jetbrains.com/docs/intellij/tools-intellij-platform-gradle-plugin.html
 intellijPlatform {
     projectName = project.name
 
@@ -78,9 +78,12 @@ intellijPlatform {
     pluginVerification {
         ides {
             ide(IntelliJPlatformType.IntellijIdeaCommunity,"2022.3")
+            ide(IntelliJPlatformType.IntellijIdeaCommunity,"251.17181.16")
+//            ide(IntelliJPlatformType.AndroidStudio,"2024.2.1.9")
 //            recommended()
         }
     }
+
 }
 
 
@@ -111,7 +114,7 @@ tasks {
 ////        ideDir.set(file("C:\\Program Files\\Android\\Android Studio"))
 //    }
 
-    create("incrementBuild") {
+    register("incrementBuild") {
         group = "version"
         description = "Increment build number in version on each build"
         val versionStr = version.toString()
@@ -153,6 +156,7 @@ tasks {
 //            }
         }
     }
+
     named(Constants.Tasks.BUILD_PLUGIN) {
         dependsOn(":incrementBuild")
     }
@@ -161,3 +165,5 @@ tasks {
     }
 
 }
+
+
