@@ -59,7 +59,7 @@ class Context(
     private val namedArguments: HashMap<String, KtValueArgument> by lazy {
         val namedArguments = HashMap<String, KtValueArgument>()
         arguments?.forEach { argument ->
-            if (argument.isNamed) {
+            if (argument.isNamed()) {
                 val name = argument.getArgumentName()!!.asName.identifier
                 namedArguments[name] = argument
             }
@@ -106,4 +106,3 @@ class Context(
         callExpression!!.valueArgumentList!!.replace(ktNewArguments as PsiElement)
     }
 }
-
