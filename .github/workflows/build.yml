@@ -90,7 +90,8 @@ jobs:
           path: ./build/distributions/content/*/*
 
   # Run tests and upload a code coverage report
-  .test:
+  test:
+    if: false
     name: Test
     needs: [ build ]
     runs-on: ubuntu-latest
