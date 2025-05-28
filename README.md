@@ -1,5 +1,7 @@
 # Kotlin named arguments stubs plugin for IntelliJ IDEA and Android Studio
+<!-- Plugin description -->
 Add or create named arguments for call function and class constructors in Kotlin code
+<!-- Plugin description end -->
 
 [Install from Jetbrains Plugin Marketplace](https://plugins.jetbrains.com/plugin/20797-kotlin-named-argument-stubs/)
 or

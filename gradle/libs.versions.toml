@@ -3,14 +3,24 @@
 # https://docs.gradle.org/current/userguide/platforms.html#sub::toml-dependencies-format
 
 [versions]
-kotlin = "2.0.20"
-gradleIntelliJPlugin = "2.2.1"
+# libraries
+#junit = "4.13.2"
+#opentest4j = "1.3.0"
 
+# plugins
+kotlin = "2.1.21"
+intelliJPlatform = "2.6.0"
 
 [libraries]
+#junit = { group = "junit", name = "junit", version.ref = "junit" }
 kotlin-gradle-plugin = { module = "org.jetbrains.kotlin:kotlin-gradle-plugin", version.ref = "kotlin" }
 kotlin-gradle-plugin-api = { module = "org.jetbrains.kotlin:kotlin-gradle-plugin-api", version.ref = "kotlin" }
+#opentest4j = { group = "org.opentest4j", name = "opentest4j", version.ref = "opentest4j" }
 
 [plugins]
-kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }
-gradleIntelliJPlugin = { id = "org.jetbrains.intellij.platform", version.ref = "gradleIntelliJPlugin" }
+#https://github.com/JetBrains/gradle-changelog-plugin
+changelog = { id = "org.jetbrains.changelog", version = "2.2.1" }
+intelliJPlatform = { id = "org.jetbrains.intellij.platform", version.ref = "intelliJPlatform" }
+kotlin = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }
+#kover = { id = "org.jetbrains.kotlinx.kover", version = "0.9.1"}
+qodana = { id = "org.jetbrains.qodana", version = "2024.3.4" }

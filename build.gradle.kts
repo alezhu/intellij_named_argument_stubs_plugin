@@ -2,15 +2,18 @@ import org.jetbrains.intellij.platform.gradle.Constants
 import org.jetbrains.intellij.platform.gradle.IntelliJPlatformType
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
+import org.jetbrains.changelog.markdownToHTML
+import org.jetbrains.intellij.platform.gradle.extensions.intellijPlatform
 
 fun properties(key: String) = providers.gradleProperty(key)
 fun environment(key: String) = providers.environmentVariable(key)
 
 plugins {
-    id("java")
-//    id("org.jetbrains.intellij.platform.migration") version "2.1.0"
-    alias(libs.plugins.kotlin.jvm)
-    alias(libs.plugins.gradleIntelliJPlugin) // Gradle IntelliJ Plugin
+    id("java") // Java support
+    alias(libs.plugins.kotlin) // Kotlin support
+    alias(libs.plugins.intelliJPlatform) // IntelliJ Platform Gradle Plugin
+    alias(libs.plugins.changelog) // Gradle Changelog Plugin
+    alias(libs.plugins.qodana) // Gradle Qodana Plugin
 }
 
 group = properties("pluginGroup").get()
@@ -19,45 +22,76 @@ val jvmVersion = "17"
 val platformVersion = properties("platformVersion")
 val platformType = properties("platformType")
 
-repositories {
-    mavenCentral()
-    intellijPlatform {
-        defaultRepositories()
-    }
-}
-
-java {
-    sourceCompatibility = JavaVersion.VERSION_17
-    targetCompatibility = JavaVersion.VERSION_17
-}
-
 // Set the JVM language level used to build the project.
 kotlin {
     jvmToolchain(17)
 }
 
-dependencies {
+repositories {
+    mavenCentral()
 
+    // IntelliJ Platform Gradle Plugin Repositories Extension - read more: https://plugins.jetbrains.com/docs/intellij/tools-intellij-platform-gradle-plugin-repositories-extension.html
+    intellijPlatform {
+        defaultRepositories()
+    }
+}
+
+// Dependencies are managed with Gradle version catalog - read more: https://docs.gradle.org/current/userguide/platforms.html#sub:version-catalog
+dependencies {
+    // IntelliJ Platform Gradle Plugin Dependencies Extension - read more: https://plugins.jetbrains.com/docs/intellij/tools-intellij-platform-gradle-plugin-dependencies-extension.html
     intellijPlatform {
 //        intellijIdeaCommunity("2022.3")
-        create(platformType,platformVersion)
+        create(platformType, platformVersion)
 
         val parser = { it: String -> it.split(',').map(String::trim).filter(String::isNotEmpty) }
-        plugins(providers.gradleProperty("platformPlugins").map(parser))
-        bundledPlugins(providers.gradleProperty("platformBundledPlugins").map(parser))
+        // Plugin Dependencies. Uses `platformBundledPlugins` property from the gradle.properties file for bundled IntelliJ Platform plugins.
+        bundledPlugins(properties("platformBundledPlugins").map(parser))
+
+        // Plugin Dependencies. Uses `platformPlugins` property from the gradle.properties file for plugin from JetBrains Marketplace.
+        plugins(properties("platformPlugins").map(parser))
 
 //        instrumentationTools()
         pluginVerifier()
     }
 }
 
-// Configure Gradle IntelliJ Plugin
-// Read more: https://plugins.jetbrains.com/docs/intellij/tools-intellij-platform-gradle-plugin.html
+// Configure IntelliJ Platform Gradle Plugin - read more: https://plugins.jetbrains.com/docs/intellij/tools-intellij-platform-gradle-plugin-extension.html
 intellijPlatform {
     projectName = project.name
 
     pluginConfiguration {
-        version.set("${project.version}")
+        name = properties("pluginName")
+//        version = project.version
+
+        // Extract the <!-- Plugin description --> section from README.md and provide for the plugin's manifest
+        description = providers.fileContents(layout.projectDirectory.file("README.md")).asText.map {
+            val start = "<!-- Plugin description -->"
+            val end = "<!-- Plugin description end -->"
+
+            with(it.lines()) {
+                if (!containsAll(listOf(start, end))) {
+                    throw GradleException("Plugin description section not found in README.md:\n$start ... $end")
+                }
+                subList(indexOf(start) + 1, indexOf(end)).joinToString("\n").let(::markdownToHTML)
+            }
+        }
+
+//        val changelog = project.changelog // local variable for configuration cache compatibility
+//        // Get the latest available change notes from the changelog file
+//        changeNotes = properties("pluginVersion").map { pluginVersion ->
+//            with(changelog) {
+//                val aVersion = pluginVersion.split('.')
+//                val sVersion = aVersion.subList(0, 2).joinToString(".")
+//                logger.info("Try to get changes for verions $sVersion")
+//                renderItem(
+//                    (getOrNull(sVersion) ?: getUnreleased())
+//                        .withHeader(false)
+//                        .withEmptySections(false),
+//                    Changelog.OutputType.HTML,
+//                )
+//            }
+//        }
+
         ideaVersion {
             sinceBuild = properties("pluginSinceBuild")
             untilBuild = properties("pluginUntilBuild")
@@ -65,14 +99,20 @@ intellijPlatform {
     }
 
     signing {
-        certificateChain = System.getenv("CERTIFICATE_CHAIN")
-        privateKey = System.getenv("PRIVATE_KEY")
-        password = System.getenv("PRIVATE_KEY_PASSWORD")
+        certificateChain = environment("CERTIFICATE_CHAIN")
+        privateKey = environment("PRIVATE_KEY")
+        password = environment("PRIVATE_KEY_PASSWORD")
     }
 
-
     publishing {
-        token = System.getenv("PUBLISH_TOKEN")
+        token = environment("PUBLISH_TOKEN")
+        // The pluginVersion is based on the SemVer (https://semver.org) and supports pre-release labels, like 2.1.7-alpha.3
+        // Specify pre-release label to publish the plugin in a custom Release Channel automatically. Read more:
+        // https://plugins.jetbrains.com/docs/intellij/deployment.html#specifying-a-release-channel
+        channels = properties("pluginVersion").map {
+            listOf(
+                it.substringAfter('-', "").substringBefore('.').ifEmpty { "default" })
+        }
     }
 
     pluginVerification {
@@ -83,22 +123,20 @@ intellijPlatform {
 //            recommended()
         }
     }
+}
 
+// Configure Gradle Changelog Plugin - read more: https://github.com/JetBrains/gradle-changelog-plugin
+changelog {
+    groups.empty()
+    repositoryUrl.set(properties("pluginRepositoryUrl"))
+    version.set(project.version.toString().split('.').subList(0, 2).joinToString("."))
 }
 
 
 tasks {
-    // Set the JVM compatibility versions
-    withType<JavaCompile> {
-        sourceCompatibility = jvmVersion
-        targetCompatibility = jvmVersion
+    wrapper {
+        gradleVersion = properties("gradleVersion").get()
     }
-    withType<KotlinCompile> {
-        compilerOptions {
-            jvmTarget.set(JvmTarget.fromTarget(jvmVersion))
-        }
-    }
-
 
     buildSearchableOptions {
         enabled = false
@@ -107,12 +145,11 @@ tasks {
         enabled = false
     }
 
+    publishPlugin {
+        dependsOn(patchChangelog)
+    }
+}
 
-//    runIde {
-//        // Absolute path to installed target 3.5 Android Studio to use as
-//        // IDE Development Instance (the "Contents" directory is macOS specific):
-////        ideDir.set(file("C:\\Program Files\\Android\\Android Studio"))
-//    }
 
     register("incrementBuild") {
         group = "version"
