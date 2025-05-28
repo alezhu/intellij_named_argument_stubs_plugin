@@ -1,7 +1,3 @@
-import org.jetbrains.intellij.platform.gradle.Constants
-import org.jetbrains.intellij.platform.gradle.IntelliJPlatformType
-import org.jetbrains.kotlin.gradle.dsl.JvmTarget
-import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 import org.jetbrains.changelog.markdownToHTML
 import org.jetbrains.intellij.platform.gradle.extensions.intellijPlatform
 
@@ -117,10 +113,10 @@ intellijPlatform {
 
     pluginVerification {
         ides {
-            ide(IntelliJPlatformType.IntellijIdeaCommunity,"2022.3")
-            ide(IntelliJPlatformType.IntellijIdeaCommunity,"251.17181.16")
+//            ide(IntelliJPlatformType.IntellijIdeaCommunity,"2022.3")
+//            ide(IntelliJPlatformType.IntellijIdeaCommunity,platformVersion.get())
 //            ide(IntelliJPlatformType.AndroidStudio,"2024.2.1.9")
-//            recommended()
+            recommended()
         }
     }
 }
