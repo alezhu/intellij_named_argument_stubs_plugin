@@ -28,3 +28,4 @@ build
 local.properties
 .intellijPlatform
 .kotlin
+!gradle/wrapper/gradle-wrapper.jar
