@@ -1,3 +1,4 @@
+import Versioning.determineVersion
 import org.jetbrains.changelog.markdownToHTML
 import org.jetbrains.intellij.platform.gradle.extensions.intellijPlatform
 
@@ -13,8 +14,7 @@ plugins {
 }
 
 group = properties("pluginGroup").get()
-version = "1.0.5.131"
-val jvmVersion = "17"
+version = determineVersion()
 val platformVersion = properties("platformVersion")
 val platformType = properties("platformType")
 
@@ -147,56 +147,23 @@ tasks {
 }
 
 
-    register("incrementBuild") {
-        group = "version"
-        description = "Increment build number in version on each build"
-        val versionStr = version.toString()
-        val buildFile = project.buildFile
-
-        doFirst {
-            if (!buildFile.canWrite()) {
-                println("Can't write new version to file")
-                return@doFirst
+intellijPlatformTesting {
+    runIde {
+        register("runIdeForUiTests") {
+            task {
+                jvmArgumentProviders += CommandLineArgumentProvider {
+                    listOf(
+                        "-Drobot-server.port=8082",
+                        "-Dide.mac.message.dialogs.as.sheets=false",
+                        "-Djb.privacy.policy.text=<!--999.999-->",
+                        "-Djb.consents.confirmation.enabled=false",
+                    )
+                }
             }
-            val versionParts = versionStr.split(".").map(String::toInt).toMutableList()
-            //0 - major
-            //1 - minor
-            //2 - patch
-            //3 - build
-            if (versionParts.size < 4) {
-                return@doFirst
-            }
-            versionParts[3]++
-            val newVersion = versionParts.joinToString(".")
-            val content = buildFile.readText()
-            val newContent =
-                content.replace(
-                    regex = Regex(
-                        pattern = """version\s*=\s*"$versionStr"""",
-                        option = RegexOption.MULTILINE,
-                    ),
-                    replacement = "version = \"$newVersion\"",
-                )
-            println("Version: $versionStr -> $newVersion")
 
-            buildFile.writeText(newContent)
-//            version = newVersion
-//            project.version = newVersion
-//            named(Constants.Tasks.PATCH_PLUGIN_XML) {
-//                    for (propName in listOf("version","pluginVersion")) {
-//                        if (this.hasProperty(propName)) this.setProperty(propName, newVersion)
-//                }
-//            }
+            plugins {
+                robotServerPlugin()
+            }
         }
     }
-
-    named(Constants.Tasks.BUILD_PLUGIN) {
-        dependsOn(":incrementBuild")
-    }
-    named(Constants.Tasks.PATCH_PLUGIN_XML) {
-        dependsOn(":incrementBuild")
-    }
-
 }
-
-
