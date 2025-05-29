@@ -57,7 +57,7 @@ jobs:
         shell: bash
         run: |
           PROPERTIES="$(./gradlew properties --console=plain -q)"
-          VERSION="$(echo "$PROPERTIES" | grep "^version:" | cut -f2- -d ' ')"
+          VERSION="$(echo "$PROPERTIES" | grep "^version:" | cut -f2- -d ' ' | cut -d '.' -f1-3)"
           CHANGELOG="$(./gradlew getChangelog --unreleased --no-header --console=plain -q)"
 
           echo "version=$VERSION" >> $GITHUB_OUTPUT
@@ -250,7 +250,7 @@ jobs:
         run: |
           gh release create "v${{ needs.build.outputs.version }}" \
             --draft \
-            --title "v${{ needs.build.outputs.version }}" \
+            --title "${{ needs.build.outputs.version }}" \
             --notes "$(cat << 'EOM'
           ${{ needs.build.outputs.changelog }}
           EOM
