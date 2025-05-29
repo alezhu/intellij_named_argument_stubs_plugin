@@ -4,6 +4,8 @@
 
 ## [Unreleased]
 
+## [1.0.6] - 2025-05-29
+
 ### Changed
 
 - Adapt to IntelliJ Platform 252.*
@@ -63,14 +65,10 @@
 
 Initial release
 
-[Unreleased]: https://github.com/alezhu/intellij_named_argument_stubs_plugin/compare/1.0.5.130...HEAD
-
-[1.0.5]: https://github.com/alezhu/intellij_named_argument_stubs_plugin/compare/1.0.4...1.0.5.130
-
+[Unreleased]: https://github.com/alezhu/intellij_named_argument_stubs_plugin/compare/1.0.6...HEAD
+[1.0.6]: https://github.com/alezhu/intellij_named_argument_stubs_plugin/compare/1.0.5...1.0.6
+[1.0.5]: https://github.com/alezhu/intellij_named_argument_stubs_plugin/compare/1.0.4...1.0.5
 [1.0.4]: https://github.com/alezhu/intellij_named_argument_stubs_plugin/compare/1.0.3...1.0.4
-
-[1.0.3]: https://github.com/alezhu/intellij_named_argument_stubs_plugin/compare/1.0.2.34...1.0.3
-
-[1.0.2]: https://github.com/alezhu/intellij_named_argument_stubs_plugin/compare/1.0.1.28...1.0.2.34
-
-[1.0.1]: https://github.com/alezhu/intellij_named_argument_stubs_plugin/commits/1.0.1.28
+[1.0.3]: https://github.com/alezhu/intellij_named_argument_stubs_plugin/compare/1.0.2...1.0.3
+[1.0.2]: https://github.com/alezhu/intellij_named_argument_stubs_plugin/compare/1.0.1...1.0.2
+[1.0.1]: https://github.com/alezhu/intellij_named_argument_stubs_plugin/commits/1.0.1
