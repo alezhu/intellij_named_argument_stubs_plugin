@@ -5,7 +5,7 @@
 name: Release
 on:
   release:
-    types: [prereleased, released]
+    types: [ prereleased, released ]
 
 jobs:
 
@@ -59,6 +59,7 @@ jobs:
 
       # Publish the plugin to JetBrains Marketplace
       - name: Publish Plugin
+        if: false
         env:
           PUBLISH_TOKEN: ${{ secrets.PUBLISH_TOKEN }}
           CERTIFICATE_CHAIN: ${{ secrets.CERTIFICATE_CHAIN }}
