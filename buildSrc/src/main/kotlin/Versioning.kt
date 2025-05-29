@@ -38,7 +38,7 @@ object Versioning {
 
     private fun determineVersion(taskNames: List<String>): String {
         val isReleaseBuild = taskNames.any {
-            it in listOf("build", "buildPlugin", "publishPlugin", "patchPluginXml")
+            it in listOf("build", "buildPlugin", "patchPluginXml")
         }
         return if (isReleaseBuild) incrementVersionInFile() else readVersion()
     }
