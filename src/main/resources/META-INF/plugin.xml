@@ -21,6 +21,11 @@
 
     <change-notes>
         <![CDATA[
+      <h3>1.0.7</h3>
+      <ul>
+        <li>Adapt to IntelliJ Platform 261.*</li>
+      </ul>
+
       <h3>1.0.6</h3>
       <ul>
         <li>Adapt to IntelliJ Platform 252.*</li>
