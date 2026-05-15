@@ -4,6 +4,13 @@
 
 ## [Unreleased]
 
+## [1.0.8] - 2026-05-15
+
+### Changed
+
+- Adapt to IntelliJ Platform 262.*
+- Set minimum supported version IntelliJ Platform to 2023.3
+
 ## [1.0.7] - 2026-02-28
 
 ### Changed
@@ -71,7 +78,8 @@
 
 Initial release
 
-[Unreleased]: https://github.com/alezhu/intellij_named_argument_stubs_plugin/compare/1.0.7...HEAD
+[Unreleased]: https://github.com/alezhu/intellij_named_argument_stubs_plugin/compare/1.0.8...HEAD
+[1.0.8]: https://github.com/alezhu/intellij_named_argument_stubs_plugin/compare/1.0.7...1.0.8
 [1.0.7]: https://github.com/alezhu/intellij_named_argument_stubs_plugin/compare/1.0.6...1.0.7
 [1.0.6]: https://github.com/alezhu/intellij_named_argument_stubs_plugin/compare/1.0.5...1.0.6
 [1.0.5]: https://github.com/alezhu/intellij_named_argument_stubs_plugin/compare/1.0.4...1.0.5
