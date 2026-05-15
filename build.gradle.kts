@@ -1,4 +1,5 @@
 import Versioning.determineVersion
+import org.jetbrains.changelog.Changelog
 import org.jetbrains.changelog.markdownToHTML
 import org.jetbrains.intellij.platform.gradle.extensions.intellijPlatform
 
@@ -122,11 +123,12 @@ intellijPlatform {
             recommended()
         }
     }
+
 }
 
 // Configure Gradle Changelog Plugin - read more: https://github.com/JetBrains/gradle-changelog-plugin
 changelog {
-    groups.empty()
+//    groups.empty()
     versionPrefix.set("")
     repositoryUrl.set(properties("pluginRepositoryUrl"))
     version.set(project.version.toString().split('.').subList(0, 3).joinToString("."))
@@ -148,6 +150,18 @@ tasks {
     publishPlugin {
         dependsOn(patchChangelog)
     }
+
+
+    patchPluginXml {
+        changeNotes = provider {
+            changelog.getAll()
+                .filter { !it.value.isUnreleased }
+                .map {
+                    changelog.renderItem(it.value, Changelog.OutputType.HTML)
+                }.joinToString()
+        }
+    }
+
 }
 
 
