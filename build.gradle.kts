@@ -1,4 +1,3 @@
-import Versioning.determineVersion
 import org.jetbrains.changelog.Changelog
 import org.jetbrains.changelog.markdownToHTML
 import org.jetbrains.intellij.platform.gradle.extensions.intellijPlatform
@@ -18,7 +17,7 @@ plugins {
 }
 
 group = properties("pluginGroup").get()
-version = determineVersion()
+version = properties("pluginVersion").get()
 val platformVersion = properties("platformVersion")
 val platformType = properties("platformType")
 
@@ -131,7 +130,8 @@ changelog {
 //    groups.empty()
     versionPrefix.set("")
     repositoryUrl.set(properties("pluginRepositoryUrl"))
-    version.set(project.version.toString().split('.').subList(0, 3).joinToString("."))
+    // changelog and CI both address the release by its first three version segments
+    version.set(properties("pluginVersion").get().split('.').subList(0, 3).joinToString("."))
 }
 
 
@@ -150,7 +150,6 @@ tasks {
     publishPlugin {
         dependsOn(patchChangelog)
     }
-
 
     patchPluginXml {
         changeNotes = provider {

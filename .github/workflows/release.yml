@@ -13,6 +13,10 @@ jobs:
   release:
     name: Publish Plugin
     runs-on: ubuntu-latest
+    env:
+      # gradle.properties carries a fourth development segment (1.1.1.SNAPSHOT); the release is
+      # published under the tag itself, so override it instead of rewriting the tracked file
+      PLUGIN_VERSION: ${{ github.event.release.tag_name }}
     permissions:
       contents: write
       pull-requests: write
@@ -55,7 +59,7 @@ jobs:
         env:
           CHANGELOG: ${{ steps.properties.outputs.changelog }}
         run: |
-          ./gradlew patchChangelog --release-note="$CHANGELOG"
+          ./gradlew patchChangelog -PpluginVersion="$PLUGIN_VERSION" --release-note="$CHANGELOG"
 
       # Publish the plugin to JetBrains Marketplace
       - name: Publish Plugin
@@ -64,7 +68,7 @@ jobs:
           CERTIFICATE_CHAIN: ${{ secrets.CERTIFICATE_CHAIN }}
           PRIVATE_KEY: ${{ secrets.PRIVATE_KEY }}
           PRIVATE_KEY_PASSWORD: ${{ secrets.PRIVATE_KEY_PASSWORD }}
-        run: ./gradlew publishPlugin
+        run: ./gradlew publishPlugin -PpluginVersion="$PLUGIN_VERSION"
 
       # Upload artifact as a release asset
       - name: Upload Release Asset

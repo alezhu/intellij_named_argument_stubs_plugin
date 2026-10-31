@@ -57,6 +57,8 @@ jobs:
         shell: bash
         run: |
           PROPERTIES="$(./gradlew properties --console=plain -q)"
+          # first three segments: gradle.properties carries a fourth development segment (SNAPSHOT),
+          # the release draft is tagged without it and release.yml publishes under the tag
           VERSION="$(echo "$PROPERTIES" | grep "^version:" | cut -f2- -d ' ' | cut -d '.' -f1-3)"
           CHANGELOG="$(./gradlew getChangelog --unreleased --no-header --console=plain -q)"
 
