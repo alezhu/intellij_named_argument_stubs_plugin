@@ -67,6 +67,10 @@ class Context(
         namedArguments
     }
 
+    private val positionalArguments: List<KtValueArgument> by lazy {
+        arguments?.filterNot { it.isNamed() }.orEmpty()
+    }
+
     fun isAvailable(): Boolean {
         val parametersCount = parameterList?.size
         return parametersCount != null && (parametersCount != namedArguments.size)
@@ -74,25 +78,13 @@ class Context(
 
     fun process() {
         val newArgumentsArray = arrayOfNulls<String>(parameterList!!.size)
+        var nextPositional = 0
 
         for ((index, parameter) in parameterList!!.withIndex()) {
             val name = parameter.name
 
-            var argument: KtValueArgument? = null
-            var value: String? = null
-            if (namedArguments.containsKey(name)) {
-                argument = namedArguments[name]
-            } else if (arguments!!.size > index) {
-                argument = arguments!![index]
-            }
-            if (argument != null) {
-                value = argument.getArgumentExpression()?.text
-            } else if (parameter.hasDefaultValue()) {
-                value = parameter.defaultValue?.text
-            }
-            if (value == null) {
-                value = name
-            }
+            val argument = namedArguments[name] ?: positionalArguments.getOrNull(nextPositional++)
+            val value = argument?.getArgumentExpression()?.text ?: parameter.defaultValue?.text ?: name
             newArgumentsArray[index] = "$name = $value,"
         }
 
