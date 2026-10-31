@@ -60,7 +60,7 @@ class Context(
         val namedArguments = HashMap<String, KtValueArgument>()
         arguments?.forEach { argument ->
             if (argument.isNamed()) {
-                val name = argument.getArgumentName()!!.asName.identifier
+                val name = argument.getArgumentName()?.asName?.identifier ?: return@forEach
                 namedArguments[name] = argument
             }
         }
@@ -77,10 +77,15 @@ class Context(
     }
 
     fun process() {
-        val newArgumentsArray = arrayOfNulls<String>(parameterList!!.size)
+        // PSI can change between isAvailable() and invoke(); exit quietly instead of throwing.
+        val parameters = parameterList ?: return
+        val call = callExpression ?: return
+        val argumentList = call.valueArgumentList ?: return
+
+        val newArgumentsArray = arrayOfNulls<String>(parameters.size)
         var nextPositional = 0
 
-        for ((index, parameter) in parameterList!!.withIndex()) {
+        for ((index, parameter) in parameters.withIndex()) {
             val name = parameter.name
 
             val argument = namedArguments[name] ?: positionalArguments.getOrNull(nextPositional++)
@@ -95,6 +100,6 @@ class Context(
             postfix = "\n)",
         )
         val ktNewArguments = factory.createCallArguments(newCallStr)
-        callExpression!!.valueArgumentList!!.replace(ktNewArguments as PsiElement)
+        argumentList.replace(ktNewArguments as PsiElement)
     }
 }

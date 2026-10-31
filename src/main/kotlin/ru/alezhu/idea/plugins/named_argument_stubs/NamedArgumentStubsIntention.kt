@@ -13,18 +13,12 @@ class NamedArgumentStubsIntention : PsiElementBaseIntentionAction(), IntentionAc
         text = "Add named argument stubs"
     }
 
-//    private var context: Context? = null
-
     override fun getFamilyName(): String = "Add named argument stubs for all parameters"
 
     override fun isAvailable(project: Project, editor: Editor?, element: PsiElement): Boolean {
-        var context: Context? = Context(project, element)
+        val context = Context(project, element)
         return try {
-            val available = context!!.isAvailable()
-            if (!available) {
-                context = null
-            }
-            available
+            context.isAvailable()
         } catch (ex: ProcessCanceledException) {
             throw ex
         } catch (ex: Throwable) {
@@ -34,16 +28,13 @@ class NamedArgumentStubsIntention : PsiElementBaseIntentionAction(), IntentionAc
     }
 
     override fun invoke(project: Project, editor: Editor?, element: PsiElement) {
-//        if (context == null) context = Context(project, element)
-        var context: Context? = Context(project, element)
+        val context = Context(project, element)
         try {
-            context!!.process()
+            context.process()
         } catch (ex: ProcessCanceledException) {
             throw ex
         } catch (ex: Throwable) {
             LOG.error(ex)
-        } finally {
-            context = null
         }
     }
 
