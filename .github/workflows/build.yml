@@ -1,10 +1,10 @@
 # GitHub Actions Workflow is created for testing and preparing the plugin release in the following steps:
 # - Validate Gradle Wrapper.
-# - Run 'test' and 'verifyPlugin' tasks.
-# - Run Qodana inspections.
 # - Run the 'buildPlugin' task and prepare artifact for further tests.
-# - Run the 'runPluginVerifier' task.
-# - Create a draft release.
+# - Run the 'check' task (the test suite) and the 'verifyPlugin' task (IntelliJ Plugin Verifier against
+#   the IDE builds listed in build.gradle.kts; the Community targets are what catch an Ultimate-only API
+#   reference, since the unified 262 artifact cannot exclude it).
+# - Create a draft release, gated on both.
 #
 # The workflow is triggered on push and pull_request events.
 #
@@ -33,7 +33,6 @@ jobs:
     outputs:
       version: ${{ steps.properties.outputs.version }}
       changelog: ${{ steps.properties.outputs.changelog }}
-      pluginVerifierHomeDir: ${{ steps.properties.outputs.pluginVerifierHomeDir }}
     steps:
 
       # Check out the current repository
@@ -63,8 +62,7 @@ jobs:
           CHANGELOG="$(./gradlew getChangelog --unreleased --no-header --console=plain -q)"
 
           echo "version=$VERSION" >> $GITHUB_OUTPUT
-          echo "pluginVerifierHomeDir=~/.pluginVerifier" >> $GITHUB_OUTPUT
-          
+
           echo "changelog<<EOF" >> $GITHUB_OUTPUT
           echo "$CHANGELOG" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
@@ -91,9 +89,8 @@ jobs:
           name: ${{ steps.artifact.outputs.filename }}
           path: ./build/distributions/content/*/*
 
-  # Run tests and upload a code coverage report
+  # Run the test suite against the target platform
   test:
-    if: false
     name: Test
     needs: [ build ]
     runs-on: ubuntu-latest
@@ -126,15 +123,8 @@ jobs:
           name: tests-result
           path: ${{ github.workspace }}/build/reports/tests
 
-      # Upload the Kover report to CodeCov
-      - name: Upload Code Coverage Report
-        uses: codecov/codecov-action@v5
-        with:
-          files: ${{ github.workspace }}/build/reports/kover/report.xml
-
   # Run plugin structure verification along with IntelliJ Plugin Verifier
   verify:
-    if: false
     name: Verify plugin
     needs: [ build ]
     runs-on: ubuntu-latest
@@ -162,16 +152,11 @@ jobs:
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
 
-      # Cache Plugin Verifier IDEs
-      - name: Setup Plugin Verifier IDEs Cache
-        uses: actions/cache@v4
-        with:
-          path: ${{ needs.build.outputs.pluginVerifierHomeDir }}/ides
-          key: plugin-verifier-${{ hashFiles('build/listProductsReleases.txt') }}
-
-      # Run Verify Plugin task and IntelliJ Plugin Verifier tool
+      # Run Verify Plugin task and IntelliJ Plugin Verifier tool.
+      # The IDE builds resolve as Gradle dependencies into the Gradle cache, which
+      # gradle/actions/setup-gradle above already persists; no separate IDE cache here.
       - name: Run Plugin Verification tasks
-        run: ./gradlew verifyPlugin -Dplugin.verifier.home.dir=${{ needs.build.outputs.pluginVerifierHomeDir }}
+        run: ./gradlew verifyPlugin
 
       # Collect Plugin Verifier Result
       - name: Collect Plugin Verifier Result
@@ -186,8 +171,7 @@ jobs:
   releaseDraft:
     name: Release draft
     if: github.event_name != 'pull_request'
-    #    needs: [ build, test, inspectCode, verify ]
-    needs: [ build ]
+    needs: [ build, test, verify ]
     runs-on: ubuntu-latest
     permissions:
       contents: write

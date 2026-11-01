@@ -36,9 +36,11 @@ and `runIde` reuses the sandbox for that version. This is expected for this sche
 
 1. Raise the first three segments in `gradle.properties` (`1.0.8.SNAPSHOT` → `1.0.9.SNAPSHOT`).
 2. Fill in `[Unreleased]` in `CHANGELOG.md`.
-3. Merge to `main`. The Build workflow runs `buildPlugin` and then `releaseDraft`, which creates a
-   draft release tagged `1.0.9` with the notes from `[Unreleased]`. The `test`, `inspectCode` and
-   `verify` jobs are currently disabled with `if: false`.
+3. Merge to `main`. The Build workflow runs `buildPlugin`, then `test` runs `check` and `verify` runs
+   `verifyPlugin` (IntelliJ Plugin Verifier over the IDE builds listed in `build.gradle.kts`; allow ~25 min,
+   the Community targets are what catch an accidental Ultimate-only API reference), and only then
+   `releaseDraft` creates a draft release tagged `1.0.9` with the notes from `[Unreleased]`. Either job
+   failing means no draft.
 4. Review the draft and publish it. If the tag does not exist yet, `gh release create` creates it
    from `main`; `target_commitish` is ignored when the tag already exists. Publish the draft from
    the same push that bumped the version, without merging unrelated work in between, so the release

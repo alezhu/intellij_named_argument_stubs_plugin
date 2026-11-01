@@ -1,5 +1,6 @@
 import org.jetbrains.changelog.Changelog
 import org.jetbrains.changelog.markdownToHTML
+import org.jetbrains.intellij.platform.gradle.IntelliJPlatformType
 import org.jetbrains.intellij.platform.gradle.TestFrameworkType
 import org.jetbrains.intellij.platform.gradle.extensions.intellijPlatform
 
@@ -19,7 +20,6 @@ plugins {
 group = properties("pluginGroup").get()
 version = properties("pluginVersion").get()
 val platformVersion = properties("platformVersion")
-val platformType = properties("platformType")
 
 // Set the JVM language level used to build the project.
 kotlin {
@@ -51,7 +51,9 @@ dependencies {
 
     // IntelliJ Platform Gradle Plugin Dependencies Extension - read more: https://plugins.jetbrains.com/docs/intellij/tools-intellij-platform-gradle-plugin-dependencies-extension.html
     intellijPlatform {
-        create(platformType, platformVersion)
+        // Since 2025.3 (253) IDEA Community and Ultimate are modes of one distribution, so the
+        // build targets that single artifact instead of the `IC`/`IU` product codes.
+        intellijIdea(platformVersion)
 
         val parser = { it: String -> it.split(',').map(String::trim).filter(String::isNotEmpty) }
         // Plugin Dependencies. Uses `platformBundledPlugins` property from the gradle.properties file for bundled IntelliJ Platform plugins.
@@ -112,7 +114,13 @@ intellijPlatform {
 
     pluginVerification {
         ides {
-            recommended()
+            // `recommended()` walks the whole sinceBuild..untilBuild range and resolves 9 IDE builds
+            // (~12 GB, over an hour). These three cover the guard we actually need: the floor, the last
+            // real Community artifact, and the target — and Community builds are what catches an
+            // Ultimate-only API reference, since the compile classpath can no longer exclude it.
+            create(IntelliJPlatformType.IntellijIdeaCommunity, "2023.3")
+            create(IntelliJPlatformType.IntellijIdeaCommunity, "2025.2.5")
+            create(IntelliJPlatformType.IntellijIdea, "2026.2.4")
         }
     }
 
