@@ -11,7 +11,6 @@ plugins {
     alias(libs.plugins.kotlin) // Kotlin support
     alias(libs.plugins.intelliJPlatform) // IntelliJ Platform Gradle Plugin
     alias(libs.plugins.changelog) // Gradle Changelog Plugin
-//    alias(libs.plugins.qodana) // Gradle Qodana Plugin
 
     alias(libs.plugins.libVersionsUpdater)
 
@@ -52,7 +51,6 @@ dependencies {
 
     // IntelliJ Platform Gradle Plugin Dependencies Extension - read more: https://plugins.jetbrains.com/docs/intellij/tools-intellij-platform-gradle-plugin-dependencies-extension.html
     intellijPlatform {
-//        intellijIdeaCommunity("2022.3")
         create(platformType, platformVersion)
 
         val parser = { it: String -> it.split(',').map(String::trim).filter(String::isNotEmpty) }
@@ -62,7 +60,6 @@ dependencies {
         // Plugin Dependencies. Uses `platformPlugins` property from the gradle.properties file for plugin from JetBrains Marketplace.
         plugins(properties("platformPlugins").map(parser))
 
-//        instrumentationTools()
         pluginVerifier()
 
         testBundledPlugins(properties("platformTestBundledPlugins").map(parser))
@@ -76,7 +73,6 @@ intellijPlatform {
 
     pluginConfiguration {
         name = properties("pluginName")
-//        version = project.version
 
         // Extract the <!-- Plugin description --> section from README.md and provide for the plugin's manifest
         description = providers.fileContents(layout.projectDirectory.file("README.md")).asText.map {
@@ -90,22 +86,6 @@ intellijPlatform {
                 subList(indexOf(start) + 1, indexOf(end)).joinToString("\n").let(::markdownToHTML)
             }
         }
-
-//        val changelog = project.changelog // local variable for configuration cache compatibility
-//        // Get the latest available change notes from the changelog file
-//        changeNotes = properties("pluginVersion").map { pluginVersion ->
-//            with(changelog) {
-//                val aVersion = pluginVersion.split('.')
-//                val sVersion = aVersion.subList(0, 2).joinToString(".")
-//                logger.info("Try to get changes for verions $sVersion")
-//                renderItem(
-//                    (getOrNull(sVersion) ?: getUnreleased())
-//                        .withHeader(false)
-//                        .withEmptySections(false),
-//                    Changelog.OutputType.HTML,
-//                )
-//            }
-//        }
 
         ideaVersion {
             sinceBuild = properties("pluginSinceBuild")
@@ -132,9 +112,6 @@ intellijPlatform {
 
     pluginVerification {
         ides {
-//            ide(IntelliJPlatformType.IntellijIdeaCommunity,"2022.3")
-//            ide(IntelliJPlatformType.IntellijIdeaCommunity,platformVersion.get())
-//            ide(IntelliJPlatformType.AndroidStudio,"2024.2.1.9")
             recommended()
         }
     }
@@ -143,7 +120,6 @@ intellijPlatform {
 
 // Configure Gradle Changelog Plugin - read more: https://github.com/JetBrains/gradle-changelog-plugin
 changelog {
-//    groups.empty()
     versionPrefix.set("")
     repositoryUrl.set(properties("pluginRepositoryUrl"))
     // changelog and CI both address the release by its first three version segments
