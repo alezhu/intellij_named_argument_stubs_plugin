@@ -6,6 +6,7 @@ import com.intellij.psi.PsiElement
 import com.intellij.psi.util.PsiTreeUtil
 import com.intellij.testFramework.fixtures.BasePlatformTestCase
 import org.jetbrains.kotlin.psi.KtCallExpression
+import javax.swing.JComponent
 
 class NamedArgumentStubsIntentionTest : BasePlatformTestCase() {
 
@@ -158,6 +159,164 @@ class NamedArgumentStubsIntentionTest : BasePlatformTestCase() {
         )
     }
 
+    fun testPicksTheOverloadReachedByPositionalArguments() {
+        assertExpanded(
+            usage = "<caret>target(1, \"2\")",
+            declarations = """
+                fun target(id: Int, name: String, value: Double = 0.0): Boolean = true
+                fun target(id: Int, title: String): Boolean = false
+            """.trimIndent(),
+            expected = """
+                target(
+                    id = 1,
+                    title = "2",
+                )
+            """.normalize(),
+        )
+    }
+
+    fun testPicksTheOverloadWhoseExtraParametersAreNamed() {
+        assertExpanded(
+            usage = "<caret>target(1, title = \"2\")",
+            declarations = """
+                fun target(id: Int, name: String, value: Double = 0.0): Boolean = true
+                fun target(id: Int, title: String): Boolean = false
+            """.trimIndent(),
+            expected = """
+                target(
+                    id = 1,
+                    title = "2",
+                )
+            """.normalize(),
+        )
+    }
+
+    fun testOffersEveryOverloadTheCallMatchesEqually() {
+        val chooser = RecordingChooser { it.first() }
+        val expanded = invokeOn("<caret>target(1, \"2\")", AMBIGUOUS_DECLARATIONS, chooser)
+
+        assertEquals(
+            listOf("target(first: Int, second: String)", "target(id: Int, name: String)"),
+            chooser.offered.orEmpty().map { it.signature },
+        )
+        assertEquals(
+            """
+            target(
+                first = 1,
+                second = "2",
+            )
+            """.normalize(),
+            expanded,
+        )
+    }
+
+    fun testExpandsWithTheOverloadChosenInThePopup() {
+        val expanded = invokeOn("<caret>target(1, \"2\")", AMBIGUOUS_DECLARATIONS, RecordingChooser { it.last() })
+
+        assertEquals(
+            """
+            target(
+                id = 1,
+                name = "2",
+            )
+            """.normalize(),
+            expanded,
+        )
+    }
+
+    fun testLeavesTheCallUntouchedWhenThePopupIsCancelled() {
+        val expanded = invokeOn("<caret>target(1, \"2\")", AMBIGUOUS_DECLARATIONS, RecordingChooser { null })
+
+        assertEquals("target(1, \"2\")", expanded)
+    }
+
+    fun testDoesNotOfferAChoiceWhenASingleOverloadFits() {
+        val chooser = RecordingChooser { it.first() }
+        assertExpanded(
+            usage = "<caret>target(1, \"2\")",
+            declarations = """
+                fun target(id: Int, name: String, value: Double = 0.0): Boolean = true
+                fun target(id: Int, title: String): Boolean = false
+            """.trimIndent(),
+            expected = """
+                target(
+                    id = 1,
+                    title = "2",
+                )
+            """.normalize(),
+            chooser = chooser,
+        )
+        assertNull("No choice offered for an unambiguous call", chooser.offered)
+    }
+
+    // An argument name that exists in neither overload leaves the frontend with one
+    // closest candidate; the intention follows it instead of refusing outright.
+    fun testExpandsToTheCandidateLeftWhenNoOverloadMatchesTheNames() {
+        assertExpanded(
+            usage = "<caret>target(1, unknown = \"2\")",
+            declarations = """
+                fun target(id: Int, name: String, value: Double = 0.0): Boolean = true
+                fun target(id: Int, title: String): Boolean = false
+            """.trimIndent(),
+            expected = """
+                target(
+                    id = 1,
+                    title = title,
+                )
+            """.normalize(),
+        )
+    }
+
+    // An empty call with two fully applicable overloads: the frontend narrows to the
+    // candidate that needs no default arguments, so the stubs come from that signature.
+    fun testExpandsEmptyCallToTheOverloadThatNeedsNoDefaults() {
+        assertExpanded(
+            usage = "<caret>target()",
+            declarations = """
+                fun target(id: Int = 1, name: String = "a", value: Double = 0.0): Boolean = true
+                fun target(id: Int = 2, title: String = "b"): Boolean = false
+            """.trimIndent(),
+            expected = """
+                target(
+                    id = 2,
+                    title = "b",
+                )
+            """.normalize(),
+        )
+    }
+
+    fun testExpandsEmptyCallWithUnapplicableOverloads() {
+        assertExpanded(
+            usage = "<caret>target()",
+            declarations = """
+                fun target(id: Int, name: String, value: Double = 0.0): Boolean = true
+                fun target(id: Int, title: String): Boolean = false
+            """.trimIndent(),
+            expected = """
+                target(
+                    id = id,
+                    title = title,
+                )
+            """.normalize(),
+        )
+    }
+
+    fun testPicksTheSameOverloadWhateverTheDeclarationOrderIs() {
+        assertExpanded(
+            usage = "<caret>target(1, \"2\")",
+            declarations = """
+                fun target(id: Int, title: String): Boolean = false
+                fun target(id: Int, name: String, value: Double = 0.0): Boolean = true
+            """.trimIndent(),
+            expected = """
+                target(
+                    id = 1,
+                    title = "2",
+                )
+            """.normalize(),
+        )
+    }
+
     private fun source(usage: String, declarations: String) = """
         $declarations
 
@@ -181,9 +340,15 @@ class NamedArgumentStubsIntentionTest : BasePlatformTestCase() {
         usage: String,
         expected: String,
         declarations: String = DEFAULT_DECLARATIONS,
+        chooser: OverloadChooser = RecordingChooser { it.first() },
     ) {
+        assertEquals(expected, invokeOn(usage, declarations, chooser))
+    }
+
+    private fun invokeOn(usage: String, declarations: String, chooser: OverloadChooser): String {
         configure(usage, declarations)
         val intention = NamedArgumentStubsIntention()
+        intention.overloadChooser = chooser
         val element = elementAtCaret()
         val callee = PsiTreeUtil.getParentOfType(element, KtCallExpression::class.java)?.calleeExpression?.text
             ?: error("There is no call expression around the caret")
@@ -194,7 +359,7 @@ class NamedArgumentStubsIntentionTest : BasePlatformTestCase() {
         }
         PsiDocumentManager.getInstance(project).commitAllDocuments()
 
-        assertEquals(expected, callText(callee))
+        return callText(callee)
     }
 
     private fun callText(callee: String): String =
@@ -204,8 +369,24 @@ class NamedArgumentStubsIntentionTest : BasePlatformTestCase() {
 
     private fun String.normalize(): String = replace(Regex("\\s+"), " ").trim()
 
+    // Stands in for the popup: records what was offered and applies the caller's pick.
+    private class RecordingChooser(private val pick: (List<Overload>) -> Overload?) : OverloadChooser {
+        var offered: List<Overload>? = null
+            private set
+
+        override fun choose(overloads: List<Overload>, anchor: JComponent, onChosen: (Overload) -> Unit) {
+            offered = overloads
+            pick(overloads)?.let(onChosen)
+        }
+    }
+
     companion object {
         private const val DEFAULT_DECLARATIONS =
             "fun target(id: Int, name: String, value: Double = 0.0): Boolean = true"
+
+        private val AMBIGUOUS_DECLARATIONS = """
+            fun target(first: Int, second: String): Boolean = true
+            fun target(id: Int, name: String): Boolean = false
+        """.trimIndent()
     }
 }

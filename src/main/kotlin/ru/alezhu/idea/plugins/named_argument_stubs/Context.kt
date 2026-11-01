@@ -22,20 +22,19 @@ class Context(
     }
 
     private val reference: PsiReference? by lazy {
-        //reference will be null if references more than 1
-//        referenceElement?.reference
-        referenceElement?.references?.firstOrNull { it is PsiReference }
+        // The callee name carries a single composite reference; the first element is it.
+        referenceElement?.references?.firstOrNull()
     }
 
-    private val definition: PsiElement? by lazy {
-        var result = reference?.resolve()
-        if (reference != null && result == null && reference is PsiPolyVariantReference) {
-            val definitions = (reference as PsiPolyVariantReference).multiResolve(true)
-            if (definitions.isNotEmpty()) {
-                result = definitions[0].element
-            }
+    private val definitionCandidates: List<PsiElement> by lazy {
+        val ref = reference ?: return@lazy emptyList()
+        val elements = if (ref is PsiPolyVariantReference) {
+            ref.multiResolve(false).mapNotNull { it.element }
+        } else {
+            listOfNotNull(ref.resolve())
         }
-        result
+        // Merged declarations (expect/actual, multi-file) repeat the same PSI element.
+        elements.distinctBy { it.containingFile?.virtualFile?.path to it.textRange }
     }
 
     private val callExpression: KtCallExpression? by lazy {
@@ -43,18 +42,10 @@ class Context(
         refParent as? KtCallExpression
     }
 
-    private val parameterList: List<KtParameter>? by lazy {
-        definition?.let {
-            val ktParameterList = PsiTreeUtil.findChildOfType(it, KtParameterList::class.java)
-            ktParameterList?.parameters
-        }
-    }
-
     private val arguments: List<KtValueArgument>? by lazy {
         val ktArguments = callExpression?.valueArgumentList
         ktArguments?.arguments
     }
-
 
     private val namedArguments: HashMap<String, KtValueArgument> by lazy {
         val namedArguments = HashMap<String, KtValueArgument>()
@@ -71,14 +62,33 @@ class Context(
         arguments?.filterNot { it.isNamed() }.orEmpty()
     }
 
-    fun isAvailable(): Boolean {
-        val parametersCount = parameterList?.size
-        return parametersCount != null && (parametersCount != namedArguments.size)
+    /**
+     * Declarations the call can be expanded against. A single one is applied without asking,
+     * several mean the user has to pick, none means the intention does not apply.
+     *
+     * The fit is judged from the call shape alone — arity and the names actually present;
+     * positional arguments fill the leading parameters and the rest must be named in the call.
+     * Types are not compared, so an overload that differs only by argument types stays a
+     * candidate and reaches the chooser instead of being silently guessed.
+     */
+    fun expansionTargets(): List<Overload> {
+        val candidates = overloads
+        if (candidates.size <= 1) return candidates
+
+        val split = positionalArguments.size
+        return candidates.filter { overload ->
+            val parameters = overload.parameters
+            parameters.size >= split &&
+                parameters.drop(split).all { it.name in namedArguments } &&
+                namedArguments.keys.all { name -> parameters.any { it.name == name } }
+        }
     }
 
-    fun process() {
+    fun isAvailable(): Boolean = expansionTargets().any { it.parameters.size != namedArguments.size }
+
+    fun process(overload: Overload) {
         // PSI can change between isAvailable() and invoke(); exit quietly instead of throwing.
-        val parameters = parameterList ?: return
+        val parameters = overload.parameters
         val call = callExpression ?: return
         val argumentList = call.valueArgumentList ?: return
 
@@ -102,4 +112,18 @@ class Context(
         val ktNewArguments = factory.createCallArguments(newCallStr)
         argumentList.replace(ktNewArguments as PsiElement)
     }
+
+    private val overloads: List<Overload> by lazy {
+        definitionCandidates.mapNotNull { element ->
+            val parameters = PsiTreeUtil.findChildOfType(element, KtParameterList::class.java)?.parameters
+            parameters?.let { Overload(element, it, signatureOf(it)) }
+        }
+    }
+
+    private fun signatureOf(parameters: List<KtParameter>): String {
+        val callee = callExpression?.calleeExpression?.text ?: return parameters.joinToString(", ", "(", ")") { it.flatText() }
+        return parameters.joinToString(", ", "$callee(", ")") { it.flatText() }
+    }
+
+    private fun KtParameter.flatText(): String = text.replace(Regex("\\s+"), " ").trim()
 }
