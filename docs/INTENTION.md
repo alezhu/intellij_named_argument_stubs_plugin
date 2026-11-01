@@ -31,6 +31,29 @@ symptom first, because that is what you will be staring at.
 - The fit is deliberately type-blind, so two overloads differing only in parameter types both reach
   the chooser. Do not "fix" that by pulling in the Kotlin analysis API unless it is asked for.
 
+## What the availability check costs
+
+- Measured in the fixture, `isAvailable()` on a fresh `Context`, first call and then a repeat: a callee
+  position costs 40–1300 ms the first time the file is resolved and 0 ms on every repeat; a name
+  reference that is not a callee yields no candidates and costs 0 ms either way. Repeats are free
+  because the platform caches resolution by PSI stamp. Do not add a cache of our own: it would store
+  what is already cached, the intention instance is a project singleton, and `generatePreview` runs on
+  `IntentionPreviewUtils.obtainCopyForPreview` copies, where one stale entry becomes a wrong expansion.
+
+- `Context` checks the call shape before resolving — the name must be the callee of a `KtCallExpression`.
+  That is not a speed fix (see the measurements above); it is what keeps availability from promising an
+  expansion `process()` refuses to write, because `process()` needs the same argument list.
+
+- In Kotlin PSI the callee of a constructor call `Holder(1, "2")` is a plain `KtNameReferenceExpression`
+  whose parent is the `KtCallExpression` — there is no `KtUserType` between them, so a callee-position
+  check needs no constructor special case. Verify any such assumption with a probe dump, not with the
+  grammar.
+
+- Probing through `NamedArgumentStubsIntentionTest.source()` quietly produces broken files: the helper
+  wraps the usage in `val usage = …`, so `val f = ::target` becomes `val usage = val f = ::target` and the
+  PSI you dump is an error element rather than what the IDE sees. Write probe usages as complete
+  expressions (`::target`, `Pair(1, target)`), and check the file parses before believing a dump.
+
 ## Preview in the intentions popup
 
 - `PsiElementBaseIntentionAction` does not implement `generatePreview`. The inherited `IntentionAction`

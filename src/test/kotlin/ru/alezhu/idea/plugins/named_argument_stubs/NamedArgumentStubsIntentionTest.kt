@@ -61,6 +61,26 @@ class NamedArgumentStubsIntentionTest : BasePlatformTestCase() {
         )
     }
 
+    // A name that is not being called has no argument list of its own, so the intention stays out
+    // even where the name resolves to a declaration that has parameters.
+    fun testIsNotAvailableForACallableReference() {
+        assertAvailable("::tar<caret>get", expected = false)
+    }
+
+    fun testIsNotAvailableForANamePassedAsAnArgument() {
+        assertAvailable("Pair(1, tar<caret>get)", expected = false)
+    }
+
+    // The callee of a constructor call is a name reference directly inside the call expression,
+    // not a type reference, so it passes the same position check a function call does.
+    fun testIsAvailableForACalleeThatIsAConstructor() {
+        assertAvailable(
+            usage = "Hol<caret>der(1, \"2\")",
+            declarations = "class Holder(val id: Int, val name: String, val active: Boolean = false)",
+            expected = true,
+        )
+    }
+
     fun testExpandsPositionalArgumentsAndFillsDefaults() {
         assertExpanded(
             "<caret>target(1, \"2\")",

@@ -28,6 +28,9 @@ class Context(
 
     private val definitionCandidates: List<PsiElement> by lazy {
         val ref = reference ?: return@lazy emptyList()
+        // Only a name being called has an argument list to expand, which is also what process()
+        // insists on. Asking here keeps availability and invocation from disagreeing.
+        if (callExpression == null) return@lazy emptyList()
         val elements = if (ref is PsiPolyVariantReference) {
             ref.multiResolve(false).mapNotNull { it.element }
         } else {
@@ -114,16 +117,15 @@ class Context(
     }
 
     private val overloads: List<Overload> by lazy {
+        val callee = callExpression?.calleeExpression?.text ?: return@lazy emptyList()
         definitionCandidates.mapNotNull { element ->
             val parameters = PsiTreeUtil.findChildOfType(element, KtParameterList::class.java)?.parameters
-            parameters?.let { Overload(element, it, signatureOf(it)) }
+            parameters?.let { Overload(element, it, signatureOf(it, callee)) }
         }
     }
 
-    private fun signatureOf(parameters: List<KtParameter>): String {
-        val callee = callExpression?.calleeExpression?.text ?: return parameters.joinToString(", ", "(", ")") { it.flatText() }
-        return parameters.joinToString(", ", "$callee(", ")") { it.flatText() }
-    }
+    private fun signatureOf(parameters: List<KtParameter>, callee: String): String =
+        parameters.joinToString(", ", "$callee(", ")") { it.flatText() }
 
     private fun KtParameter.flatText(): String = text.replace(Regex("\\s+"), " ").trim()
 }
