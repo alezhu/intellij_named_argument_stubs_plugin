@@ -82,7 +82,7 @@ class NamedArgumentStubsIntention : PsiElementBaseIntentionAction(), IntentionAc
     }
 
     companion object {
-        private val LOG = Logger.getInstance(this::class.java)
+        private val LOG = Logger.getInstance(NamedArgumentStubsIntention::class.java)
     }
 
 }
