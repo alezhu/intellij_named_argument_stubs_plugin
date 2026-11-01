@@ -6,6 +6,15 @@ fun testFun(
     value: Double = 0.0
 ): Boolean = false
 
+fun testFun2(
+    id: Int,
+): Boolean = false
+
+fun testFun2(
+    name: String,
+): Boolean = false
+
+
 class Test(
     val id: Int,
     val name: String,
@@ -17,7 +26,8 @@ fun getName() = "Tst"
 val testObj1 = Test(1, value = 2.0, name = getName())
 val testObj2 = Test(2, name = getName())
 
-//val testObj3 = Test()
+val testObj3 = Test()
 val test1 = testFun(1, name = "2")
 val test3 = testFun(1, value = 3.0 / 4, name = "2")
-//val test4 = testFun()
+val test4 = testFun()
+val test5 = testFun2()

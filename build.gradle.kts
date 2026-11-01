@@ -25,6 +25,16 @@ val platformType = properties("platformType")
 // Set the JVM language level used to build the project.
 kotlin {
     jvmToolchain(17)
+
+    // `manual/` is a scratch pad for trying the intention by hand, so it is allowed to hold
+    // non-compiling calls. It stays a directory of the main Kotlin source set — that is what lets
+    // the IDE resolve the calls in it — but is filtered out before compilation and the plugin jar.
+    sourceSets.named("main") {
+        kotlin {
+            srcDir("manual")
+            exclude("**/demo.kt")
+        }
+    }
 }
 
 repositories {
