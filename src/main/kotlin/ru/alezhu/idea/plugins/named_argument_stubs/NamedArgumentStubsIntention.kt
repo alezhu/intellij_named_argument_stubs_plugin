@@ -2,12 +2,15 @@ package ru.alezhu.idea.plugins.named_argument_stubs
 
 import com.intellij.codeInsight.intention.IntentionAction
 import com.intellij.codeInsight.intention.PsiElementBaseIntentionAction
+import com.intellij.codeInsight.intention.preview.IntentionPreviewInfo
+import com.intellij.codeInsight.intention.preview.IntentionPreviewUtils
 import com.intellij.openapi.command.WriteCommandAction
 import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.editor.Editor
 import com.intellij.openapi.progress.ProcessCanceledException
 import com.intellij.openapi.project.Project
 import com.intellij.psi.PsiElement
+import com.intellij.psi.PsiFile
 
 class NamedArgumentStubsIntention : PsiElementBaseIntentionAction(), IntentionAction {
     init {
@@ -53,8 +56,8 @@ class NamedArgumentStubsIntention : PsiElementBaseIntentionAction(), IntentionAc
         element: PsiElement,
         targets: List<Overload>,
     ) {
-        val anchor = editor?.contentComponent ?: return
-        overloadChooser.choose(targets, anchor) { chosen ->
+        if (editor == null) return
+        overloadChooser.choose(targets, editor) { chosen ->
             WriteCommandAction.runWriteCommandAction(project) {
                 if (!element.isValid()) return@runWriteCommandAction
                 val fresh = Context(project, element)
@@ -63,6 +66,19 @@ class NamedArgumentStubsIntention : PsiElementBaseIntentionAction(), IntentionAc
                     ?.let { fresh.process(it) }
             }
         }
+    }
+
+    /**
+     * Shows the expanded call in the intentions preview while there is only one way to expand it.
+     * With several fitting overloads the chooser lists them, so previewing one would be a guess.
+     */
+    override fun generatePreview(project: Project, editor: Editor, file: PsiFile): IntentionPreviewInfo {
+        val element = getElement(editor, file) ?: return IntentionPreviewInfo.EMPTY
+        val context = Context(project, element)
+        val targets = context.expansionTargets()
+        if (targets.size != 1) return IntentionPreviewInfo.EMPTY
+        IntentionPreviewUtils.write<Throwable> { context.process(targets.single()) }
+        return IntentionPreviewInfo.DIFF
     }
 
     companion object {

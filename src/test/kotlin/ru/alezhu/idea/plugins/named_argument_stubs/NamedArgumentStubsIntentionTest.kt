@@ -1,12 +1,15 @@
 package ru.alezhu.idea.plugins.named_argument_stubs
 
+import com.intellij.codeInsight.intention.preview.IntentionPreviewInfo
+import com.intellij.codeInsight.intention.preview.IntentionPreviewUtils
 import com.intellij.openapi.command.WriteCommandAction
+import com.intellij.openapi.editor.Editor
 import com.intellij.psi.PsiDocumentManager
 import com.intellij.psi.PsiElement
+import com.intellij.psi.PsiFile
 import com.intellij.psi.util.PsiTreeUtil
 import com.intellij.testFramework.fixtures.BasePlatformTestCase
 import org.jetbrains.kotlin.psi.KtCallExpression
-import javax.swing.JComponent
 
 class NamedArgumentStubsIntentionTest : BasePlatformTestCase() {
 
@@ -317,6 +320,75 @@ class NamedArgumentStubsIntentionTest : BasePlatformTestCase() {
         )
     }
 
+    fun testPreviewsTheOnlyExpansionAnUnambiguousCallHas() {
+        val (info, previewed) = preview("<caret>target(1, \"2\")", DEFAULT_DECLARATIONS)
+
+        assertSame(IntentionPreviewInfo.DIFF, info)
+        assertEquals(
+            """
+            target(
+                id = 1,
+                name = "2",
+                value = 0.0,
+            )
+            """.normalize(),
+            previewed,
+        )
+    }
+
+    // Several overloads fit the call, so the preview cannot know which one the user will pick.
+    fun testPreviewsNothingWhenTheCallLeavesAChoice() {
+        val (info, previewed) = preview("<caret>target(1, \"2\")", AMBIGUOUS_DECLARATIONS)
+
+        assertSame(IntentionPreviewInfo.EMPTY, info)
+        assertEquals("target(1, \"2\")", previewed)
+    }
+
+    fun testLeavesTheOriginalCallUntouchedWhenPreviewing() {
+        configure("<caret>target(1, \"2\")", DEFAULT_DECLARATIONS)
+        preview("<caret>target(1, \"2\")", DEFAULT_DECLARATIONS)
+
+        assertEquals("target(1, \"2\")", callText("target"))
+    }
+
+    // An underfilled call is what the intention exists for, so a parameter without an
+    // argument does not disqualify its declaration; the chooser lists what still fits.
+    fun testOffersEveryOverloadOfACallWithMissingArguments() {
+        val chooser = RecordingChooser { it.first() }
+        val expanded = invokeOn(
+            "<caret>testFun2()",
+            """
+                fun testFun2(id: Int): Boolean = false
+                fun testFun2(name: String): Boolean = false
+            """.trimIndent(),
+            chooser,
+        )
+
+        assertEquals(
+            listOf("testFun2(id: Int)", "testFun2(name: String)"),
+            chooser.offered.orEmpty().map { it.signature },
+        )
+        assertEquals(
+            """
+            testFun2(
+                id = id,
+            )
+            """.normalize(),
+            expanded,
+        )
+    }
+
+    fun testIsNotAvailableWhenNoOverloadTakesEveryArgument() {
+        assertAvailable(
+            usage = "<caret>target(1, \"2\", 3.0)",
+            declarations = """
+                fun target(first: Int, second: String): Boolean = true
+                fun target(id: Int, name: String): Boolean = false
+            """.trimIndent(),
+            expected = false,
+        )
+    }
+
     private fun source(usage: String, declarations: String) = """
         $declarations
 
@@ -362,10 +434,26 @@ class NamedArgumentStubsIntentionTest : BasePlatformTestCase() {
         return callText(callee)
     }
 
-    private fun callText(callee: String): String =
-        PsiTreeUtil.findChildrenOfType(myFixture.file, KtCallExpression::class.java)
+    private fun callText(callee: String, file: PsiFile = myFixture.file): String =
+        PsiTreeUtil.findChildrenOfType(file, KtCallExpression::class.java)
             .first { it.calleeExpression?.text == callee }
             .text.normalize()
+
+    // The intentions preview writes to a detached copy of the file; do the same here.
+    private fun preview(usage: String, declarations: String): Pair<IntentionPreviewInfo, String> {
+        configure(usage, declarations)
+        val intention = NamedArgumentStubsIntention()
+        val callee = PsiTreeUtil.getParentOfType(elementAtCaret(), KtCallExpression::class.java)?.calleeExpression?.text
+            ?: error("There is no call expression around the caret")
+        val copy = IntentionPreviewUtils.obtainCopyForPreview(myFixture.file)
+
+        var info: IntentionPreviewInfo = IntentionPreviewInfo.EMPTY
+        IntentionPreviewUtils.previewSession(myFixture.editor) {
+            info = intention.generatePreview(project, myFixture.editor, copy)
+        }
+
+        return info to callText(callee, copy)
+    }
 
     private fun String.normalize(): String = replace(Regex("\\s+"), " ").trim()
 
@@ -374,7 +462,7 @@ class NamedArgumentStubsIntentionTest : BasePlatformTestCase() {
         var offered: List<Overload>? = null
             private set
 
-        override fun choose(overloads: List<Overload>, anchor: JComponent, onChosen: (Overload) -> Unit) {
+        override fun choose(overloads: List<Overload>, editor: Editor, onChosen: (Overload) -> Unit) {
             offered = overloads
             pick(overloads)?.let(onChosen)
         }

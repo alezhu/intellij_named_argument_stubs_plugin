@@ -67,7 +67,8 @@ class Context(
      * several mean the user has to pick, none means the intention does not apply.
      *
      * The fit is judged from the call shape alone — arity and the names actually present;
-     * positional arguments fill the leading parameters and the rest must be named in the call.
+     * positional arguments fill the leading parameters, every named argument has to exist in
+     * the declaration, and the parameters left without an argument are the ones to be stubbed.
      * Types are not compared, so an overload that differs only by argument types stays a
      * candidate and reaches the chooser instead of being silently guessed.
      */
@@ -79,7 +80,6 @@ class Context(
         return candidates.filter { overload ->
             val parameters = overload.parameters
             parameters.size >= split &&
-                parameters.drop(split).all { it.name in namedArguments } &&
                 namedArguments.keys.all { name -> parameters.any { it.name == name } }
         }
     }

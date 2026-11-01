@@ -1,18 +1,17 @@
 package ru.alezhu.idea.plugins.named_argument_stubs
 
+import com.intellij.openapi.editor.Editor
 import com.intellij.openapi.ui.popup.JBPopupFactory
 import com.intellij.openapi.ui.popup.PopupStep
 import com.intellij.openapi.ui.popup.util.BaseListPopupStep
-import com.intellij.ui.awt.RelativePoint
-import javax.swing.JComponent
 
 /** Asks the user which of the equally fitting [Overload]s the call means. */
 internal fun interface OverloadChooser {
-    fun choose(overloads: List<Overload>, anchor: JComponent, onChosen: (Overload) -> Unit)
+    fun choose(overloads: List<Overload>, editor: Editor, onChosen: (Overload) -> Unit)
 }
 
 internal class PopupOverloadChooser : OverloadChooser {
-    override fun choose(overloads: List<Overload>, anchor: JComponent, onChosen: (Overload) -> Unit) {
+    override fun choose(overloads: List<Overload>, editor: Editor, onChosen: (Overload) -> Unit) {
         val step = object : BaseListPopupStep<Overload>(TITLE, overloads) {
             override fun getTextFor(value: Overload): String = value.signature
 
@@ -24,7 +23,7 @@ internal class PopupOverloadChooser : OverloadChooser {
                     super.onChosen(selectedValue, finalChoice)
                 }
         }
-        JBPopupFactory.getInstance().createListPopup(step).show(RelativePoint.getSouthWestOf(anchor))
+        JBPopupFactory.getInstance().createListPopup(step).showInBestPositionFor(editor)
     }
 
     companion object {
