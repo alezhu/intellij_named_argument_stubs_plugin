@@ -247,6 +247,38 @@ class NamedArgumentStubsIntentionTest : BasePlatformTestCase() {
         )
     }
 
+    // The popup lists flattened signatures, so two declarations can read the same. The choice must
+    // still land on the declaration it was made for, identified by file and range, not by that text.
+    fun testAppliesTheChosenDeclarationWhenTwoSignaturesReadTheSame() {
+        val declarations = listOf(
+            "fun target(id: Int, s: String = \"\"\"a\nb\"\"\"): Boolean = true",
+            "fun target(id: Int, s: String = \"\"\"a b\"\"\"): Boolean = false",
+        ).joinToString("\n")
+        configure("<caret>target(1)", declarations)
+        val chooser = RecordingChooser { it.last() }
+        val intention = NamedArgumentStubsIntention().apply { overloadChooser = chooser }
+
+        intention.invoke(project, myFixture.editor, elementAtCaret())
+        PsiDocumentManager.getInstance(project).commitAllDocuments()
+
+        assertEquals(
+            "The chooser preconditions changed: both rows must read the same",
+            1,
+            chooser.offered.orEmpty().map { it.signature }.distinct().size,
+        )
+        assertEquals(2, chooser.offered.orEmpty().size)
+
+        val expanded = callRawText("target")
+        assertTrue(
+            "Expected the default of the chosen declaration, got:\n$expanded",
+            expanded.contains("s = \"\"\"a b\"\"\""),
+        )
+        assertFalse(
+            "The default of the other declaration leaked in:\n$expanded",
+            expanded.contains("\"\"\"a\nb\"\"\""),
+        )
+    }
+
     fun testLeavesTheCallUntouchedWhenThePopupIsCancelled() {
         val expanded = invokeOn("<caret>target(1, \"2\")", AMBIGUOUS_DECLARATIONS, RecordingChooser { null })
 
@@ -580,6 +612,12 @@ class NamedArgumentStubsIntentionTest : BasePlatformTestCase() {
         PsiTreeUtil.findChildrenOfType(file, KtCallExpression::class.java)
             .first { it.calleeExpression?.text == callee }
             .text.normalize()
+
+    // Whitespace matters here: a raw string default differs from another by the newline inside it.
+    private fun callRawText(callee: String, file: PsiFile = myFixture.file): String =
+        PsiTreeUtil.findChildrenOfType(file, KtCallExpression::class.java)
+            .first { it.calleeExpression?.text == callee }
+            .text
 
     // The intentions preview writes to a detached copy of the file; do the same here.
     private fun preview(usage: String, declarations: String): Pair<IntentionPreviewInfo, String> {

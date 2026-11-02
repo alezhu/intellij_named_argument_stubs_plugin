@@ -39,7 +39,7 @@ class Context(
             listOfNotNull(ref.resolve())
         }
         // Merged declarations (expect/actual, multi-file) repeat the same PSI element.
-        elements.distinctBy { it.containingFile?.virtualFile?.path to it.textRange }
+        elements.distinctBy { it.declarationKey() }
     }
 
     private val callExpression: KtCallExpression? by lazy {

@@ -50,8 +50,10 @@ class NamedArgumentStubsIntention : PsiElementBaseIntentionAction(), IntentionAc
             WriteCommandAction.runWriteCommandAction(project) {
                 if (!element.isValid()) return@runWriteCommandAction
                 val fresh = Context(project, element)
+                // Re-resolution builds new PSI elements; the file and range identify the one the
+                // user picked even when another declaration's signature reads the same.
                 fresh.expansionTargets()
-                    .firstOrNull { it.signature == chosen.signature }
+                    .firstOrNull { it.key == chosen.key }
                     ?.let { fresh.process(it) }
             }
         }
