@@ -2,6 +2,8 @@ package ru.alezhu.idea.plugins.named_argument_stubs
 
 import com.intellij.codeInsight.intention.preview.IntentionPreviewInfo
 import com.intellij.codeInsight.intention.preview.IntentionPreviewUtils
+import com.intellij.openapi.command.CommandEvent
+import com.intellij.openapi.command.CommandListener
 import com.intellij.openapi.command.WriteCommandAction
 import com.intellij.openapi.editor.Editor
 import com.intellij.psi.PsiDocumentManager
@@ -277,6 +279,29 @@ class NamedArgumentStubsIntentionTest : BasePlatformTestCase() {
             "The default of the other declaration leaked in:\n$expanded",
             expanded.contains("\"\"\"a\nb\"\"\""),
         )
+    }
+
+    // The intention's own command is over by the time the popup reports a choice, so the callback
+    // has to open a named command or the write lands in undo as an unnamed entry.
+    fun testNamesTheCommandThatAppliesThePopupChoice() {
+        configure("<caret>target(1, \"2\")", AMBIGUOUS_DECLARATIONS)
+        val intention = NamedArgumentStubsIntention().apply {
+            overloadChooser = RecordingChooser { it.first() }
+        }
+        val started = mutableListOf<String?>()
+        project.messageBus.connect(testRootDisposable).subscribe(
+            CommandListener.TOPIC,
+            object : CommandListener {
+                override fun commandStarted(event: CommandEvent) {
+                    started += event.commandName
+                }
+            },
+        )
+
+        intention.invoke(project, myFixture.editor, elementAtCaret())
+        PsiDocumentManager.getInstance(project).commitAllDocuments()
+
+        assertEquals(listOf("Add named argument stubs"), started)
     }
 
     fun testLeavesTheCallUntouchedWhenThePopupIsCancelled() {

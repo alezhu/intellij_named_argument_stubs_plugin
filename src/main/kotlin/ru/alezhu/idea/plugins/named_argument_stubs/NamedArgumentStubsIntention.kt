@@ -38,7 +38,8 @@ class NamedArgumentStubsIntention : PsiElementBaseIntentionAction(), IntentionAc
         }
     }
 
-    // The popup closes after invoke() returns, so the write action it triggers reads the PSI anew.
+    // The popup closes after invoke() returns, so the platform's command (and its undo entry) is
+    // over by the time a choice arrives; the write needs a command of its own and a name for undo.
     private fun chooseAndProcess(
         project: Project,
         editor: Editor?,
@@ -47,8 +48,8 @@ class NamedArgumentStubsIntention : PsiElementBaseIntentionAction(), IntentionAc
     ) {
         if (editor == null) return
         overloadChooser.choose(targets, editor) { chosen ->
-            WriteCommandAction.runWriteCommandAction(project) {
-                if (!element.isValid()) return@runWriteCommandAction
+            WriteCommandAction.writeCommandAction(project).withName(text).run<Throwable> {
+                if (!element.isValid()) return@run
                 val fresh = Context(project, element)
                 // Re-resolution builds new PSI elements; the file and range identify the one the
                 // user picked even when another declaration's signature reads the same.
