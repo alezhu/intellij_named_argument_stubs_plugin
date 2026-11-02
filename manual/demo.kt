@@ -1,5 +1,3 @@
-package ru.alezhu.idea.plugins.named_argument_stubs
-
 fun testFun(
     id: Int,
     name: String,
