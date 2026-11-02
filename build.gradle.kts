@@ -192,12 +192,15 @@ tasks {
     }
 
     patchPluginXml {
+        // Only the section being released: the full archive would grow plugin.xml on every release,
+        // and Marketplace/IDE show these notes as "What's new" for the current update only.
         changeNotes = provider {
-            changelog.getAll()
-                .filter { !it.value.isUnreleased }
-                .map {
-                    changelog.renderItem(it.value, Changelog.OutputType.HTML)
-                }.joinToString()
+            val item = changelog.getAll().values
+                .firstOrNull {
+                    it.isUnreleased && (it.summary.isNotEmpty() || it.sections.any { (_, v) -> v.isNotEmpty() })
+                }
+                ?: changelog.getLatest()
+            changelog.renderItem(item, Changelog.OutputType.HTML)
         }
     }
 
