@@ -470,6 +470,16 @@ class NamedArgumentStubsIntentionTest : BasePlatformTestCase() {
         )
     }
 
+    // `target { }` has no valueArgumentList, so there is nothing for process() to rewrite; the row
+    // must not appear at all instead of doing nothing.
+    fun testIsNotAvailableForACallWithoutAnArgumentList() {
+        assertAvailable(
+            usage = "<caret>target { }",
+            declarations = "fun target(id: Int = 0, block: () -> Unit): Boolean = true",
+            expected = false,
+        )
+    }
+
     private fun source(usage: String, declarations: String) = """
         $declarations
 

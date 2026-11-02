@@ -28,9 +28,10 @@ class Context(
 
     private val definitionCandidates: List<PsiElement> by lazy {
         val ref = reference ?: return@lazy emptyList()
-        // Only a name being called has an argument list to expand, which is also what process()
-        // insists on. Asking here keeps availability and invocation from disagreeing.
-        if (callExpression == null) return@lazy emptyList()
+        // Only a parenthesised argument list is something process() can rewrite (and what it exits
+        // on). A bare trailing lambda `f { }` has none, so availability must refuse it rather than
+        // offering an expansion that cannot be written.
+        if (callExpression?.valueArgumentList == null) return@lazy emptyList()
         val elements = if (ref is PsiPolyVariantReference) {
             ref.multiResolve(false).mapNotNull { it.element }
         } else {
