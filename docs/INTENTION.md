@@ -54,9 +54,19 @@ symptom first, because that is what you will be staring at.
   what is already cached, the intention instance is a project singleton, and `generatePreview` runs on
   `IntentionPreviewUtils.obtainCopyForPreview` copies, where one stale entry becomes a wrong expansion.
 
-- `Context` checks the call shape before resolving — the name must be the callee of a `KtCallExpression`.
-  That is not a speed fix (see the measurements above); it is what keeps availability from promising an
-  expansion `process()` refuses to write, because `process()` needs the same argument list.
+- `Context` checks the call shape before resolving — the name must be the callee of a `KtCallExpression`
+  that has a parenthesised `valueArgumentList`. That is not a speed fix (see the measurements above); it
+  is what keeps availability from promising an expansion `process()` refuses to write, because
+  `process()` replaces that list. A bare trailing lambda `f { }` has `valueArgumentList == null`, so the
+  row is gone instead of inert.
+
+- A trailing lambda is a `KtLambdaArgument` child of the call, next to `KtValueArgumentList`, never an
+  element of `valueArgumentList.arguments` (probe: `target(1) { }` → arguments `[1]`, lambdaArguments
+  `[{ }]`). It always fills the last parameter, so `process()` skips that parameter and leaves the lambda
+  where it is — otherwise it appended `block = block` beside the existing lambda, a duplicate argument.
+  Availability counts the lambda as one filled slot (`parameters.size != namedArguments.size + 1`), and
+  arity lets positional arguments fill only the parameters before it; a leading vararg still absorbs
+  them. `target(1, 2) { }` against `target(id, block)` is refused instead of dropping `2`.
 
 - In Kotlin PSI the callee of a constructor call `Holder(1, "2")` is a plain `KtNameReferenceExpression`
   whose parent is the `KtCallExpression` — there is no `KtUserType` between them, so a callee-position

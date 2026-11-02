@@ -4,6 +4,11 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- Do not offer the intention for a call without a parenthesised argument list (`target { }`).
+- Keep a trailing lambda out of the generated named arguments instead of stubbing its parameter twice.
+
 ## [1.0.8] - 2026-05-15
 
 ### Changed
