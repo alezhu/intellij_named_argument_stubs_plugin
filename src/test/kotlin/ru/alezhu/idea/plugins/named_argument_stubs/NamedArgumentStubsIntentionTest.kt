@@ -409,6 +409,14 @@ class NamedArgumentStubsIntentionTest : BasePlatformTestCase() {
         )
     }
 
+    fun testIsNotAvailableWhenTheOnlyOverloadTakesFewerArguments() {
+        assertAvailable(
+            usage = "<caret>target(1, \"2\", 3.0)",
+            declarations = "fun target(id: Int, name: String): Boolean = true",
+            expected = false,
+        )
+    }
+
     private fun source(usage: String, declarations: String) = """
         $declarations
 

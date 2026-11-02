@@ -69,21 +69,24 @@ class Context(
      * Declarations the call can be expanded against. A single one is applied without asking,
      * several mean the user has to pick, none means the intention does not apply.
      *
-     * The fit is judged from the call shape alone — arity and the names actually present;
-     * positional arguments fill the leading parameters, every named argument has to exist in
-     * the declaration, and the parameters left without an argument are the ones to be stubbed.
-     * Types are not compared, so an overload that differs only by argument types stays a
-     * candidate and reaches the chooser instead of being silently guessed.
+     * The fit is judged from the call shape alone — arity always, the names actually present only
+     * while the frontend still leaves a choice. Positional arguments fill the leading parameters,
+     * and the parameters left without an argument are the ones to be stubbed. Types are not
+     * compared, so an overload that differs only by argument types stays a candidate and reaches
+     * the chooser instead of being silently guessed.
      */
     fun expansionTargets(): List<Overload> {
         val candidates = overloads
-        if (candidates.size <= 1) return candidates
-
         val split = positionalArguments.size
-        return candidates.filter { overload ->
-            val parameters = overload.parameters
-            parameters.size >= split &&
-                namedArguments.keys.all { name -> parameters.any { it.name == name } }
+        // Arity applies even to the single candidate the frontend leaves: a declaration that cannot
+        // take every positional argument would make process() drop the extras in silence.
+        val fitting = candidates.filter { overload ->
+            overload.parameters.size >= split
+        }
+        if (candidates.size <= 1) return fitting
+
+        return fitting.filter { overload ->
+            namedArguments.keys.all { name -> overload.parameters.any { it.name == name } }
         }
     }
 
