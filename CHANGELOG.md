@@ -4,6 +4,11 @@
 
 ## [Unreleased]
 
+### Added
+
+- Ask which overload the call means when several fit instead of generating names from the first one.
+- Preview the expansion in the intention popup when exactly one overload fits.
+
 ### Fixed
 
 - Do not offer the intention for a call without a parenthesised argument list (`target { }`).

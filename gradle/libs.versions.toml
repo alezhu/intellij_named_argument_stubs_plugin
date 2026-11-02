@@ -14,8 +14,6 @@ libVersionsUpdater = "0.66.0"
 
 [libraries]
 junit = { group = "junit", name = "junit", version.ref = "junit" }
-kotlin-gradle-plugin = { module = "org.jetbrains.kotlin:kotlin-gradle-plugin", version.ref = "kotlin" }
-kotlin-gradle-plugin-api = { module = "org.jetbrains.kotlin:kotlin-gradle-plugin-api", version.ref = "kotlin" }
 
 [plugins]
 #https://github.com/JetBrains/gradle-changelog-plugin
