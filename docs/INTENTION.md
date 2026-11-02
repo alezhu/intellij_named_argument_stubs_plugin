@@ -25,8 +25,9 @@ symptom first, because that is what you will be staring at.
   and everything else is exactly what the expansion is supposed to generate. When torn between a wrong
   guess and a question, ask.
 
-- `isAvailable()` catches `Throwable`, logs it and returns false. A missing row can therefore be a
-  swallowed exception — check `idea.log` of the sandbox first; if it is clean, a filter returned empty.
+- `isAvailable()` swallows only `IndexNotReadyException` and reports the intention as unavailable while
+  the index is being built. Every other exception propagates to the platform as an IDE error, so a
+  missing row with a clean `idea.log` means a filter returned empty, not a hidden crash.
 
 - The fit is deliberately type-blind, so two overloads differing only in parameter types both reach
   the chooser. Do not "fix" that by pulling in the Kotlin analysis API unless it is asked for.
