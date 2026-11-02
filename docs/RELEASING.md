@@ -25,8 +25,9 @@ and `runIde` reuses the sandbox for that version. This is expected for this sche
 ## Before every release
 
 - Pick a version whose tag is not taken yet: `git tag -l | grep <version>` and the Releases page.
-  If a release for that tag already exists, `gh release create` in the Build workflow fails; if only
-  the tag exists, the draft is created against that older commit.
+  If a release for that tag already exists, the Build workflow skips the draft with a notice (main
+  normally keeps the previous version until the next bump); if only the tag exists, the Build
+  workflow fails instead of creating a draft against that older commit.
 - Add the release notes to the `[Unreleased]` section of `CHANGELOG.md`. `patchChangelog` stamps a
   heading with the first three segments, so a section for that version must not already exist.
 - The `PUBLISH_TOKEN`, `CERTIFICATE_CHAIN`, `PRIVATE_KEY` and `PRIVATE_KEY_PASSWORD` repository
@@ -40,14 +41,17 @@ and `runIde` reuses the sandbox for that version. This is expected for this sche
    `verifyPlugin` (IntelliJ Plugin Verifier over the IDE builds listed in `build.gradle.kts`; allow ~25 min,
    the Community targets are what catch an accidental Ultimate-only API reference), and only then
    `releaseDraft` creates a draft release tagged `1.0.9` with the notes from `[Unreleased]`. Either job
-   failing means no draft.
+   failing means no draft. A version that is already released is skipped with a notice, so main stays
+   green between releases without a version bump.
 4. Review the draft and publish it. If the tag does not exist yet, `gh release create` creates it
    from `main`; `target_commitish` is ignored when the tag already exists. Publish the draft from
    the same push that bumped the version, without merging unrelated work in between, so the release
    content is unambiguous.
 5. The `released` event triggers the Release workflow: it checks out the tag, runs `patchChangelog`
    and `publishPlugin` with `-PpluginVersion=1.0.9`, uploads `build/distributions/*.zip` as a
-   release asset and opens a `changelog-update-<version>` pull request.
+   release asset and opens a `changelog-update-<version>` pull request. The workflow is idempotent:
+   once the zip is attached to the release, a re-run (or flipping a pre-release to a full release)
+   skips the Marketplace upload, and a failed changelog-PR step does not fail the release.
 6. Merge that pull request. `gradle.properties` keeps `1.0.9.SNAPSHOT` until the next release.
 
 ## Notes

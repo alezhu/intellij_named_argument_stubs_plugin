@@ -201,6 +201,17 @@ tasks {
         }
     }
 
+    // The enabled-plugins list decides which platform modules the test runtime boots, but Gradle does
+    // not see it as an input, so changing the list replayed a cached pass for the old one. Declaring
+    // the property keeps the test result honest both locally and in CI.
+    test {
+        inputs.property("platformTestBundledPlugins", properties("platformTestBundledPlugins"))
+    }
+
+    named("prepareTest") {
+        inputs.property("platformTestBundledPlugins", properties("platformTestBundledPlugins"))
+    }
+
 }
 
 

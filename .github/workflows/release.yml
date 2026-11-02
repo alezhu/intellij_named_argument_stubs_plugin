@@ -1,11 +1,23 @@
 # GitHub Actions Workflow created for handling the release process based on the draft release prepared with the Build workflow.
 # Running the publishPlugin task requires all following secrets to be provided: PUBLISH_TOKEN, PRIVATE_KEY, PRIVATE_KEY_PASSWORD, CERTIFICATE_CHAIN.
 # See https://plugins.jetbrains.com/docs/intellij/plugin-signing.html for more information.
+#
+# The workflow is idempotent: re-running it (or flipping a pre-release to a full release) skips the
+# Marketplace upload once the plugin zip is already attached to the release, and overwrites it otherwise.
 
 name: Release
 on:
   release:
     types: [ prereleased, released ]
+
+concurrency:
+  group: release-${{ github.event.release.tag_name }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write       # upload the release asset
+  pull-requests: write  # open the changelog pull request
+  issues: write         # create the label used by that pull request
 
 jobs:
 
@@ -13,45 +25,61 @@ jobs:
   release:
     name: Publish Plugin
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     env:
       # gradle.properties carries a fourth development segment (1.1.1.SNAPSHOT); the release is
       # published under the tag itself, so override it instead of rewriting the tracked file
       PLUGIN_VERSION: ${{ github.event.release.tag_name }}
-    permissions:
-      contents: write
-      pull-requests: write
     steps:
 
       # Check out the current repository
       - name: Fetch Sources
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           ref: ${{ github.event.release.tag_name }}
 
       # Set up Java environment for the next steps
       - name: Setup Java
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v6
         with:
           distribution: zulu
           java-version: 21
 
       # Setup Gradle
       - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v4
+        uses: gradle/actions/setup-gradle@v6
+        with:
+          cache-provider: basic
 
       # Set environment variables
       - name: Export Properties
         id: properties
         shell: bash
+        env:
+          RELEASE_BODY: ${{ github.event.release.body }}
         run: |
-          CHANGELOG="$(cat << 'EOM' | sed -e 's/^[[:space:]]*$//g' -e '/./,$!d'
-          ${{ github.event.release.body }}
-          EOM
-          )"
-          
-          echo "changelog<<EOF" >> $GITHUB_OUTPUT
-          echo "$CHANGELOG" >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
+          CHANGELOG="$(printf '%s\n' "$RELEASE_BODY" | sed -e 's/^[[:space:]]*$//g' -e '/./,$!d')"
+
+          echo "changelog<<EOF" >> "$GITHUB_OUTPUT"
+          echo "$CHANGELOG" >> "$GITHUB_OUTPUT"
+          echo "EOF" >> "$GITHUB_OUTPUT"
+
+      # The zip attached to the release is the marker of a successful publish. Without this guard a
+      # converted pre-release or a manual re-run would send the same version to the Marketplace again,
+      # which it rejects.
+      - name: Check Already Published
+        id: published
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          ASSETS="$(gh release view "$PLUGIN_VERSION" --json assets --jq '.assets[].name' 2>/dev/null || true)"
+          if printf '%s\n' "$ASSETS" | grep -q '\.zip$'; then
+            echo "::notice::Release $PLUGIN_VERSION already has the plugin zip, skipping the Marketplace upload"
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
 
       # Update the Unreleased section with the current release note
       - name: Patch Changelog
@@ -63,6 +91,7 @@ jobs:
 
       # Publish the plugin to JetBrains Marketplace
       - name: Publish Plugin
+        if: ${{ steps.published.outputs.skip != 'true' }}
         env:
           PUBLISH_TOKEN: ${{ secrets.PUBLISH_TOKEN }}
           CERTIFICATE_CHAIN: ${{ secrets.CERTIFICATE_CHAIN }}
@@ -72,34 +101,47 @@ jobs:
 
       # Upload artifact as a release asset
       - name: Upload Release Asset
+        if: ${{ steps.published.outputs.skip != 'true' }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh release upload ${{ github.event.release.tag_name }} ./build/distributions/*
+        run: gh release upload "$PLUGIN_VERSION" ./build/distributions/*.zip --clobber
 
-      # Create a pull request
+      # Create a pull request. The plugin is already published at this point, so a failure here must
+      # not turn a successful release red; the error stays in the log and the step can be re-run.
       - name: Create Pull Request
         if: ${{ steps.properties.outputs.changelog != '' }}
+        continue-on-error: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          VERSION="${{ github.event.release.tag_name }}"
-          BRANCH="changelog-update-$VERSION"
+          BRANCH="changelog-update-$PLUGIN_VERSION"
           LABEL="release changelog"
 
-          git config user.email "action@github.com"
-          git config user.name "GitHub Action"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git config user.name "github-actions[bot]"
 
-          git checkout -b $BRANCH
-          git commit -am "Changelog update - $VERSION"
-          git push --set-upstream origin $BRANCH
-          
+          if git diff --quiet; then
+            echo "Changelog is already up to date"
+            exit 0
+          fi
+
+          STATES="$(gh pr list --head "$BRANCH" --state all --json state --jq '.[].state')"
+          if printf '%s\n' "$STATES" | grep -qE '^(OPEN|MERGED)$'; then
+            echo "Pull request for $BRANCH is already open or merged"
+            exit 0
+          fi
+
+          git commit -am "Changelog update - $PLUGIN_VERSION"
+          # the branch is bot-owned and regenerated from the tag, so overwrite a stale copy
+          git push --force origin "HEAD:refs/heads/$BRANCH"
+
           gh label create "$LABEL" \
             --description "Pull requests with release changelog update" \
             --force \
             || true
 
           gh pr create \
-            --title "Changelog update - \`$VERSION\`" \
-            --body "Current pull request contains patched \`CHANGELOG.md\` file for the \`$VERSION\` version." \
+            --title "Changelog update - \`$PLUGIN_VERSION\`" \
+            --body "Current pull request contains patched \`CHANGELOG.md\` file for the \`$PLUGIN_VERSION\` version." \
             --label "$LABEL" \
-            --head $BRANCH
+            --head "$BRANCH"

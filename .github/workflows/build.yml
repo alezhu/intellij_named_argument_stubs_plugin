@@ -1,12 +1,12 @@
 # GitHub Actions Workflow is created for testing and preparing the plugin release in the following steps:
-# - Validate Gradle Wrapper.
 # - Run the 'buildPlugin' task and prepare artifact for further tests.
 # - Run the 'check' task (the test suite) and the 'verifyPlugin' task (IntelliJ Plugin Verifier against
 #   the IDE builds listed in build.gradle.kts; the Community targets are what catch an Ultimate-only API
 #   reference, since the unified 262 artifact cannot exclude it).
 # - Create a draft release, gated on both.
 #
-# The workflow is triggered on push and pull_request events.
+# The workflow is triggered on push and pull_request events, and can be dispatched manually.
+# The Gradle Wrapper is validated by gradle/actions/setup-gradle, where `validate-wrappers` defaults to true.
 #
 # GitHub Actions reference: https://help.github.com/en/actions
 #
@@ -19,10 +19,15 @@ on:
     branches: [ main ]
   # Trigger the workflow on any pull request
   pull_request:
+  # Allow a manual run, e.g. to re-create a release draft after a transient failure
+  workflow_dispatch:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
+
+permissions:
+  contents: read
 
 jobs:
 
@@ -30,6 +35,7 @@ jobs:
   build:
     name: Build
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     outputs:
       version: ${{ steps.properties.outputs.version }}
       changelog: ${{ steps.properties.outputs.changelog }}
@@ -37,18 +43,22 @@ jobs:
 
       # Check out the current repository
       - name: Fetch Sources
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       # Set up Java environment for the next steps
       - name: Setup Java
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v6
         with:
           distribution: zulu
           java-version: 21
 
       # Setup Gradle
+      # v6 defaults to the proprietary 'enhanced' cache provider; 'basic' is the plain actions/cache
+      # implementation used before, so cache data is not sent to a third-party service.
       - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v4
+        uses: gradle/actions/setup-gradle@v6
+        with:
+          cache-provider: basic
 
       # Set environment variables
       - name: Export Properties
@@ -61,55 +71,59 @@ jobs:
           VERSION="$(echo "$PROPERTIES" | grep "^version:" | cut -f2- -d ' ' | cut -d '.' -f1-3)"
           CHANGELOG="$(./gradlew getChangelog --unreleased --no-header --console=plain -q)"
 
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
-          echo "changelog<<EOF" >> $GITHUB_OUTPUT
-          echo "$CHANGELOG" >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
+          echo "changelog<<EOF" >> "$GITHUB_OUTPUT"
+          echo "$CHANGELOG" >> "$GITHUB_OUTPUT"
+          echo "EOF" >> "$GITHUB_OUTPUT"
 
       # Build plugin
       - name: Build plugin
         run: ./gradlew buildPlugin
 
-      # Prepare plugin archive content for creating artifact
+      # Store the distribution zip as an artifact for downloading and manual installation
       - name: Prepare Plugin Artifact
         id: artifact
         shell: bash
         run: |
-          cd ${{ github.workspace }}/build/distributions
-          FILENAME=`ls *.zip`
-          unzip "$FILENAME" -d content
-
-          echo "filename=${FILENAME:0:-4}" >> $GITHUB_OUTPUT
+          mapfile -t ZIPS < <(ls build/distributions/*.zip)
+          if [ "${#ZIPS[@]}" -ne 1 ]; then
+            echo "::error::Expected exactly one plugin zip in build/distributions, found ${#ZIPS[@]}"
+            exit 1
+          fi
+          FILENAME="$(basename "${ZIPS[0]}")"
+          echo "filename=${FILENAME%.zip}" >> "$GITHUB_OUTPUT"
 
       # Store already-built plugin as an artifact for downloading
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ${{ steps.artifact.outputs.filename }}
-          path: ./build/distributions/content/*/*
+          path: build/distributions/*.zip
 
   # Run the test suite against the target platform
   test:
     name: Test
-    needs: [ build ]
     runs-on: ubuntu-latest
+    timeout-minutes: 40
     steps:
 
       # Check out the current repository
       - name: Fetch Sources
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       # Set up Java environment for the next steps
       - name: Setup Java
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v6
         with:
           distribution: zulu
           java-version: 21
 
       # Setup Gradle
       - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v4
+        uses: gradle/actions/setup-gradle@v6
+        with:
+          cache-provider: basic
 
       # Run tests
       - name: Run Tests
@@ -118,39 +132,42 @@ jobs:
       # Collect Tests Result of failed tests
       - name: Collect Tests Result
         if: ${{ failure() }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: tests-result
           path: ${{ github.workspace }}/build/reports/tests
+          if-no-files-found: ignore
 
   # Run plugin structure verification along with IntelliJ Plugin Verifier
   verify:
     name: Verify plugin
-    needs: [ build ]
     runs-on: ubuntu-latest
+    timeout-minutes: 60
     steps:
 
       # Free GitHub Actions Environment Disk Space
+      # Pinned to v2.0.0: this is a third-party action, so the ref must not be a moving branch.
       - name: Maximize Build Space
-        uses: jlumbroso/free-disk-space@main
+        uses: jlumbroso/free-disk-space@ceedf095f4ec1a097402bc6bd80831f2e1a6fde6
         with:
-          tool-cache: false
           large-packages: false
 
       # Check out the current repository
       - name: Fetch Sources
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       # Set up Java environment for the next steps
       - name: Setup Java
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v6
         with:
           distribution: zulu
           java-version: 21
 
       # Setup Gradle
       - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v4
+        uses: gradle/actions/setup-gradle@v6
+        with:
+          cache-provider: basic
 
       # Run Verify Plugin task and IntelliJ Plugin Verifier tool.
       # The IDE builds resolve as Gradle dependencies into the Gradle cache, which
@@ -161,7 +178,7 @@ jobs:
       # Collect Plugin Verifier Result
       - name: Collect Plugin Verifier Result
         if: ${{ always() }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: pluginVerifier-result
           path: ${{ github.workspace }}/build/reports/pluginVerifier
@@ -173,32 +190,61 @@ jobs:
     if: github.event_name != 'pull_request'
     needs: [ build, test, verify ]
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     permissions:
       contents: write
     steps:
 
       # Check out the current repository
       - name: Fetch Sources
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
+
+      # Skip a version that is already published: gradle.properties keeps the previous version until
+      # the next manual bump, so this is the normal state of main between releases and must stay green.
+      # A tag without any release is different: a draft created for it would silently target that older
+      # commit, so fail and ask for a version bump instead. An existing draft is simply recreated below.
+      - name: Check Version Availability
+        id: availability
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ needs.build.outputs.version }}
+        run: |
+          DRAFT="$(gh api "repos/{owner}/{repo}/releases/tags/$VERSION" --jq '.draft' 2>/dev/null || true)"
+          if [ "$DRAFT" = "false" ]; then
+            echo "::notice::Release $VERSION is already published, skipping the release draft"
+            SKIP=true
+          elif [ -z "$DRAFT" ] && gh api "repos/{owner}/{repo}/git/ref/tags/$VERSION" >/dev/null 2>&1; then
+            echo "::error::Tag $VERSION exists but has no release; a draft would be created against that older commit. Bump pluginVersion in gradle.properties."
+            exit 1
+          else
+            SKIP=false
+          fi
+          echo "skip=$SKIP" >> "$GITHUB_OUTPUT"
 
       # Remove old release drafts by using the curl request for the available releases with a draft flag
       - name: Remove Old Release Drafts
+        if: ${{ steps.availability.outputs.skip != 'true' }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh api repos/{owner}/{repo}/releases \
+          gh api repos/{owner}/{repo}/releases --paginate \
             --jq '.[] | select(.draft == true) | .id' \
-            | xargs -I '{}' gh api -X DELETE repos/{owner}/{repo}/releases/{}
+            | while read -r id; do
+                gh api -X DELETE "repos/{owner}/{repo}/releases/$id"
+              done
 
-      # Create a new release draft which is not publicly visible and requires manual acceptance
+      # Create a new release draft which is not publicly visible and requires manual acceptance.
+      # The notes go through a file, so their content is never interpolated into the shell script.
       - name: Create Release Draft
+        if: ${{ steps.availability.outputs.skip != 'true' }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ needs.build.outputs.version }}
+          CHANGELOG: ${{ needs.build.outputs.changelog }}
         run: |
-          gh release create "${{ needs.build.outputs.version }}" \
+          printf '%s\n' "$CHANGELOG" > release-notes.md
+          gh release create "$VERSION" \
             --draft \
-            --title "${{ needs.build.outputs.version }}" \
-            --notes "$(cat << 'EOM'
-          ${{ needs.build.outputs.changelog }}
-          EOM
-          )"
+            --title "$VERSION" \
+            --notes-file release-notes.md
