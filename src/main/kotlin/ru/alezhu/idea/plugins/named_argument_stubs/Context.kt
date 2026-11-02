@@ -6,6 +6,7 @@ import com.intellij.psi.PsiPolyVariantReference
 import com.intellij.psi.PsiReference
 import com.intellij.psi.util.PsiTreeUtil
 import org.jetbrains.kotlin.psi.KtCallExpression
+import org.jetbrains.kotlin.psi.KtLambdaArgument
 import org.jetbrains.kotlin.psi.KtNameReferenceExpression
 import org.jetbrains.kotlin.psi.KtParameter
 import org.jetbrains.kotlin.psi.KtParameterList
@@ -66,24 +67,45 @@ class Context(
         arguments?.filterNot { it.isNamed() }.orEmpty()
     }
 
+    private val lambdaArguments: List<KtLambdaArgument> by lazy {
+        callExpression?.lambdaArguments.orEmpty()
+    }
+
+    // A trailing lambda is a child of the call, not an entry of valueArgumentList, and it always
+    // fills the last parameter. Broken code can parse more than one, which has no sane mapping.
+    private val trailingLambdaSlots: Int by lazy {
+        when (lambdaArguments.size) {
+            0 -> 0
+            1 -> 1
+            else -> -1
+        }
+    }
+
     /**
      * Declarations the call can be expanded against. A single one is applied without asking,
      * several mean the user has to pick, none means the intention does not apply.
      *
      * The fit is judged from the call shape alone — arity always, the names actually present only
      * while the frontend still leaves a choice. Positional arguments fill the leading parameters
-     * (a vararg takes all the rest), and the parameters left without an argument are the ones to be
-     * stubbed. Types are not compared, so an overload that differs only by argument types stays a
-     * candidate and reaches the chooser instead of being silently guessed.
+     * (a vararg takes all the rest), a trailing lambda keeps the last one, and the parameters left
+     * without an argument are the ones to be stubbed. Types are not compared, so an overload that
+     * differs only by argument types stays a candidate and reaches the chooser instead of being
+     * silently guessed.
      */
     fun expansionTargets(): List<Overload> {
         val candidates = overloads
         val split = positionalArguments.size
+        val lambdaSlots = trailingLambdaSlots
+        if (lambdaSlots < 0) return emptyList()
         // Arity applies even to the single candidate the frontend leaves: a declaration that cannot
-        // take every positional argument would make process() drop the extras in silence. A vararg
-        // parameter absorbs any number of them.
+        // take every positional argument would make process() drop the extras in silence. A leading
+        // vararg absorbs any number of them. The trailing lambda reserves the last parameter, so
+        // positional arguments may fill only the ones before it.
         val fitting = candidates.filter { overload ->
-            overload.parameters.any { it.isVarArg } || overload.parameters.size >= split
+            val parameters = overload.parameters
+            val positionalTargets = parameters.dropLast(lambdaSlots)
+            parameters.size >= lambdaSlots &&
+                (positionalTargets.any { it.isVarArg } || positionalTargets.size >= split)
         }
         if (candidates.size <= 1) return fitting
 
@@ -92,18 +114,26 @@ class Context(
         }
     }
 
-    fun isAvailable(): Boolean = expansionTargets().any { it.parameters.size != namedArguments.size }
+    // The trailing lambda is already an argument of the last parameter, so it counts as one filled
+    // slot and must not be stubbed a second time.
+    fun isAvailable(): Boolean {
+        val lambdaSlots = trailingLambdaSlots
+        return expansionTargets().any { it.parameters.size != namedArguments.size + lambdaSlots }
+    }
 
     fun process(overload: Overload) {
         // PSI can change between isAvailable() and invoke(); exit quietly instead of throwing.
         val parameters = overload.parameters
         val call = callExpression ?: return
         val argumentList = call.valueArgumentList ?: return
+        val lambdaFilledIndex = if (trailingLambdaSlots == 1) parameters.lastIndex else -1
 
-        val newArgumentsArray = arrayOfNulls<String>(parameters.size)
+        val newArguments = ArrayList<String>(parameters.size)
         var nextPositional = 0
 
         for ((index, parameter) in parameters.withIndex()) {
+            // The lambda stays outside the list being replaced; its parameter is this skipped slot.
+            if (index == lambdaFilledIndex) continue
             val name = parameter.name
 
             val value = if (parameter.isVarArg) {
@@ -116,11 +146,13 @@ class Context(
                     ?: parameter.defaultValue?.text
                     ?: name
             }
-            newArgumentsArray[index] = "$name = $value,"
+            newArguments += "$name = $value,"
         }
 
+        if (newArguments.isEmpty()) return
+
         val factory = KtPsiFactory(project)
-        val newCallStr = newArgumentsArray.joinToString(
+        val newCallStr = newArguments.joinToString(
             separator = "\n",
             prefix = "(\n",
             postfix = "\n)",

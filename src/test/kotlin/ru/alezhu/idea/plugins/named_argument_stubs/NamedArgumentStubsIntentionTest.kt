@@ -480,6 +480,57 @@ class NamedArgumentStubsIntentionTest : BasePlatformTestCase() {
         )
     }
 
+    // The trailing lambda is a child of the call, not an entry of valueArgumentList. It fills the
+    // last parameter, so that parameter must not be stubbed next to the lambda.
+    fun testKeepsTheTrailingLambdaOutOfTheNamedArguments() {
+        assertExpanded(
+            usage = "<caret>target(1) { }",
+            declarations = "fun target(id: Int, block: () -> Unit): Boolean = true",
+            expected = "target( id = 1, ) { }",
+        )
+    }
+
+    fun testStubsMissingArgumentsNextToATrailingLambda() {
+        assertExpanded(
+            usage = "<caret>target() { }",
+            declarations = "fun target(id: Int, block: () -> Unit): Boolean = true",
+            expected = "target( id = id, ) { }",
+        )
+    }
+
+    fun testIsNotAvailableWhenTheTrailingLambdaIsTheOnlyArgument() {
+        assertAvailable(
+            usage = "<caret>target() { }",
+            declarations = "fun target(block: () -> Unit): Boolean = true",
+            expected = false,
+        )
+    }
+
+    fun testIsNotAvailableWhenEveryArgumentButTheLambdaIsNamed() {
+        assertAvailable(
+            usage = "<caret>target(id = 1) { }",
+            declarations = "fun target(id: Int, block: () -> Unit): Boolean = true",
+            expected = false,
+        )
+    }
+
+    // Positional arguments cannot use the slot the trailing lambda fills.
+    fun testIsNotAvailableWhenPositionalArgumentsDoNotFitBeforeTheLambda() {
+        assertAvailable(
+            usage = "<caret>target(1, 2) { }",
+            declarations = "fun target(id: Int, block: () -> Unit): Boolean = true",
+            expected = false,
+        )
+    }
+
+    fun testNamesArgumentsBeforeAVarargThatTakesTheTrailingLambda() {
+        assertExpanded(
+            usage = "<caret>target(1) { }",
+            declarations = "fun target(id: Int, vararg blocks: () -> Unit): Boolean = true",
+            expected = "target( id = 1, ) { }",
+        )
+    }
+
     private fun source(usage: String, declarations: String) = """
         $declarations
 
