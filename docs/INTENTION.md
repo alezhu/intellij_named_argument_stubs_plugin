@@ -17,13 +17,26 @@ symptom first, because that is what you will be staring at.
   filter is load-bearing, print the candidate count before and after it in a throwaway probe test
   (`raw=2 targets=[…]` vs `raw=1 targets=[…]`). Reasoning from the API docs is not evidence here.
 
+- Arity must be checked even when the frontend leaves a single candidate. Returning that candidate
+  untouched made `target(1, "2", 3.0)` against the only `target(id, name)` report available, and
+  `process()` rewrote the argument list without the third argument — silent data loss. The argument
+  name filter, unlike arity, may stay chooser-only: with one candidate the frontend has already
+  picked the closest declaration, and a name absent from it keeps the stubs on that declaration
+  (`testExpandsToTheCandidateLeftWhenNoOverloadMatchesTheNames`).
+
+- A vararg parameter absorbs any number of positional arguments, so its declaration never fails the
+  arity check. `process()` moves the extras into `name = *arrayOf(...)` and emits `*emptyArray()`
+  when the vararg got nothing (both infer their type from the parameter). Two PSI facts cost a probe
+  each: `KtValueArgument.getArgumentExpression()` returns the expression *without* the spread's `*`
+  (`getSpreadElement()` is what marks it), and a vararg passed by name must carry the spread —
+  `names = "a"` is rejected with "Assigning single elements to varargs in named form is prohibited".
+
 - Availability must never be stricter than the purpose of the intention. Requiring every parameter not
   filled positionally to already appear as a named argument made `expansionTargets()` empty for
   `testFun2()` — a call with missing arguments, which is the primary case this plugin exists for. The
   symptom was that the row disappeared from Alt+Enter with no error anywhere: `isAvailable()` returned
-  false. Positional arguments fill the leading parameters, named ones must exist in the declaration,
-  and everything else is exactly what the expansion is supposed to generate. When torn between a wrong
-  guess and a question, ask.
+  false. Positional arguments fill the leading parameters, and everything else is exactly what the
+  expansion is supposed to generate. When torn between a wrong guess and a question, ask.
 
 - `isAvailable()` swallows only `IndexNotReadyException` and reports the intention as unavailable while
   the index is being built. Every other exception propagates to the platform as an IDE error, so a
