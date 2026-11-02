@@ -11,6 +11,13 @@ symptom first, because that is what you will be staring at.
   (merged `expect`/`actual` declarations repeat the same PSI), and treat "several fit" as a question
   for the user, not a guess.
 
+- Apply the popup's choice through that same `(path, textRange)` key, never through `Overload.signature`.
+  The signature is display text with whitespace flattened, so two declarations can read the same
+  (`s: String = """a\nb"""` vs `s: String = """a b"""` both flatten to one line); matching by text then
+  applies the first declaration, not the picked one. The key also survives the re-resolution: the
+  callback gets new PSI elements, but their file and range are unchanged.
+  `testAppliesTheChosenDeclarationWhenTwoSignaturesReadTheSame` fails on text matching.
+
 - The Kotlin callee reference usually narrows the candidates before any filter of ours runs. A call
   like `target(1, "2")` against `target(id, name, value = 0.0)` + `target(id, title)` resolves to the
   two-parameter one on its own. Consequence: a shape filter can be pure dead code. Before believing a
@@ -106,7 +113,10 @@ symptom first, because that is what you will be staring at.
 
 - The chooser is opened from inside `invoke()`, so the write action it triggers runs after the popup
   closes and the intentions popup is gone. Re-read the PSI in that callback (`element.isValid()` and a
-  fresh `Context`) instead of reusing captured elements.
+  fresh `Context`) instead of reusing captured elements, and open a command of your own —
+  `writeCommandAction(project).withName(text)` — because the platform's command around `invoke()` has
+  already finished by then; without a name the undo entry reads "Undefined".
+  `testNamesTheCommandThatAppliesThePopupChoice` fails without the name.
 
 ## Verifying in a running IDE (Windows)
 
