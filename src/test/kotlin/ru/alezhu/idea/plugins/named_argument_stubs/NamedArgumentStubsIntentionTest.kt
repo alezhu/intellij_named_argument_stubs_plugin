@@ -474,6 +474,55 @@ class NamedArgumentStubsIntentionTest : BasePlatformTestCase() {
         )
     }
 
+    fun testKeepsACommentBetweenArguments() {
+        assertExpanded(
+            usage = "<caret>target(1, /* name */ \"2\")",
+            expected = """
+                target(
+                    id = 1,
+                    /* name */ name = "2",
+                    value = 0.0,
+                )
+            """.normalize(),
+        )
+    }
+
+    // A line comment runs to the end of the line, so it belongs to the argument before it.
+    fun testKeepsLineCommentsThatFollowArguments() {
+        val usage = """
+            <caret>target(
+                1, // id
+                "2", // name
+            )
+        """.trimIndent()
+        invokeOn(usage, DEFAULT_DECLARATIONS, RecordingChooser { it.first() })
+
+        assertEquals(
+            """
+            target(
+            id = 1, // id
+            name = "2", // name
+            value = 0.0,
+            )
+            """.trimIndent(),
+            callRawText("target").trimIndentPerLine(),
+        )
+    }
+
+    // This comment is inside the argument, so it travels with the argument's own text.
+    fun testKeepsACommentInsideAnAlreadyNamedArgument() {
+        assertExpanded(
+            usage = "<caret>target(1, value = /* keep */ 3.0)",
+            expected = """
+                target(
+                    id = 1,
+                    name = name,
+                    value = /* keep */ 3.0,
+                )
+            """.normalize(),
+        )
+    }
+
     fun testKeepsEveryPositionalArgumentOfAVarargCall() {
         assertExpanded(
             usage = "<caret>target(1, \"a\", \"b\")",
@@ -661,6 +710,10 @@ class NamedArgumentStubsIntentionTest : BasePlatformTestCase() {
     }
 
     private fun String.normalize(): String = replace(Regex("\\s+"), " ").trim()
+
+    // A line comment swallows everything up to the newline, so normalizing all whitespace would
+    // merge it with the next argument; drop only the per-line indentation instead.
+    private fun String.trimIndentPerLine(): String = lines().joinToString("\n") { it.trim() }
 
     // Stands in for the popup: records what was offered and applies the caller's pick.
     private class RecordingChooser(private val pick: (List<Overload>) -> Overload?) : OverloadChooser {

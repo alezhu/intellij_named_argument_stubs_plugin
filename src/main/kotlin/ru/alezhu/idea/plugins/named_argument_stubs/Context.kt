@@ -1,6 +1,7 @@
 package ru.alezhu.idea.plugins.named_argument_stubs
 
 import com.intellij.openapi.project.Project
+import com.intellij.psi.PsiComment
 import com.intellij.psi.PsiElement
 import com.intellij.psi.PsiPolyVariantReference
 import com.intellij.psi.PsiReference
@@ -12,6 +13,7 @@ import org.jetbrains.kotlin.psi.KtParameter
 import org.jetbrains.kotlin.psi.KtParameterList
 import org.jetbrains.kotlin.psi.KtPsiFactory
 import org.jetbrains.kotlin.psi.KtValueArgument
+import org.jetbrains.kotlin.psi.KtValueArgumentList
 
 
 class Context(
@@ -126,52 +128,114 @@ class Context(
         val parameters = overload.parameters
         val call = callExpression ?: return
         val argumentList = call.valueArgumentList ?: return
+        val sourceArguments = argumentList.arguments
         val lambdaFilledIndex = if (trailingLambdaSlots == 1) parameters.lastIndex else -1
 
-        val newArguments = ArrayList<String>(parameters.size)
+        val slots = ArrayList<ArgumentSlot>(parameters.size)
         var nextPositional = 0
 
         for ((index, parameter) in parameters.withIndex()) {
             // The lambda stays outside the list being replaced; its parameter is this skipped slot.
             if (index == lambdaFilledIndex) continue
             val name = parameter.name
+            val named = namedArguments[name]
 
-            val value = if (parameter.isVarArg) {
-                val elements = positionalArguments.drop(nextPositional)
-                nextPositional = positionalArguments.size
-                namedArguments[name]?.valueText() ?: varargValue(elements)
-            } else {
-                namedArguments[name]?.valueText()
-                    ?: positionalArguments.getOrNull(nextPositional++)?.valueText()
-                    ?: parameter.defaultValue?.text
-                    ?: name
+            val slot = when {
+                named != null ->
+                    ArgumentSlot(named.text, listOf(sourceArguments.indexOf(named)))
+
+                parameter.isVarArg -> {
+                    val elements = positionalArguments.drop(nextPositional)
+                    nextPositional = positionalArguments.size
+                    val indices = elements.map { sourceArguments.indexOf(it) }
+                    val text = when {
+                        elements.isEmpty() -> "$name = *emptyArray()"
+                        // A lone spread already is the array of elements, so it is reused as is.
+                        elements.singleOrNull()?.getSpreadElement() != null ->
+                            "$name = ${elements.single().text}"
+
+                        else -> "$name = *arrayOf(${elements.joinToString(", ") { it.text }})"
+                    }
+                    ArgumentSlot(text, indices)
+                }
+
+                nextPositional < positionalArguments.size -> {
+                    val argument = positionalArguments[nextPositional++]
+                    ArgumentSlot("$name = ${argument.text}", listOf(sourceArguments.indexOf(argument)))
+                }
+
+                else -> ArgumentSlot(
+                    "$name = ${parameter.defaultValue?.text ?: name}",
+                    emptyList(),
+                )
             }
-            newArguments += "$name = $value,"
+            slots += slot
         }
 
-        if (newArguments.isEmpty()) return
+        if (slots.isEmpty()) return
 
+        val newCallStr = renderArguments(argumentList, sourceArguments, slots)
         val factory = KtPsiFactory(project)
-        val newCallStr = newArguments.joinToString(
-            separator = "\n",
-            prefix = "(\n",
-            postfix = "\n)",
-        )
         val ktNewArguments = factory.createCallArguments(newCallStr)
         argumentList.replace(ktNewArguments as PsiElement)
     }
 
-    // The spread marker sits outside the expression, so it has to be re-attached by hand.
-    private fun KtValueArgument.valueText(): String? {
-        val expression = getArgumentExpression() ?: return null
-        return if (getSpreadElement() != null) "*${expression.text}" else expression.text
+    /**
+     * A rebuilt argument keeps the text of the arguments it came from, so a comment inside one of
+     * them survives. The comments between arguments are children of the argument list, not of an
+     * argument, so they have to be carried over by hand: a line comment trails the argument before
+     * it, a block comment leads the argument after it, and a comment with no argument to attach to
+     * goes to the end of the rebuilt list.
+     */
+    private fun renderArguments(
+        argumentList: KtValueArgumentList,
+        sourceArguments: List<KtValueArgument>,
+        slots: List<ArgumentSlot>,
+    ): String {
+        val comments = PsiTreeUtil.findChildrenOfType(argumentList, PsiComment::class.java)
+            .filter { comment -> sourceArguments.none { it.textRange.contains(comment.textRange) } }
+        val trailingComments = ArrayList<String>()
+
+        for (comment in comments) {
+            val previous = sourceArguments.indexOfLast {
+                it.textRange.endOffset <= comment.textRange.startOffset
+            }
+            val next = sourceArguments.indexOfFirst {
+                it.textRange.startOffset >= comment.textRange.endOffset
+            }
+            val previousSlot = slots.firstOrNull { previous in it.sourceIndices }
+            val nextSlot = slots.firstOrNull { next in it.sourceIndices }
+            when {
+                comment.text.startsWith("//") && previousSlot != null ->
+                    previousSlot.trailingComments += comment.text
+
+                nextSlot != null -> nextSlot.leadingComments += comment.text
+                else -> trailingComments += comment.text
+            }
+        }
+
+        val lines = ArrayList<String>(slots.size)
+        for (slot in slots) {
+            lines += slot.leadingComments
+            val inlineComment = slot.trailingComments.firstOrNull()?.let { " $it" }.orEmpty()
+            lines += "${slot.text},$inlineComment"
+            lines += slot.trailingComments.drop(1)
+        }
+        lines += trailingComments
+
+        return lines.joinToString(
+            separator = "\n",
+            prefix = "(\n",
+            postfix = "\n)",
+        )
     }
 
-    private fun varargValue(elements: List<KtValueArgument>): String {
-        // A lone spread already is the array of elements, so wrapping it again would only add noise.
-        elements.singleOrNull()?.takeIf { it.getSpreadElement() != null }?.valueText()?.let { return it }
-        val values = elements.mapNotNull { it.valueText() }
-        return if (values.isEmpty()) "*emptyArray()" else values.joinToString(", ", "*arrayOf(", ")")
+    private class ArgumentSlot(
+        val text: String,
+        val sourceIndices: List<Int>,
+    ) {
+        val leadingComments = ArrayList<String>()
+        val trailingComments = ArrayList<String>()
     }
 
     private val overloads: List<Overload> by lazy {
