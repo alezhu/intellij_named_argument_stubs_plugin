@@ -38,8 +38,9 @@ class NamedArgumentStubsIntention : PsiElementBaseIntentionAction(), IntentionAc
         }
     }
 
-    // The popup closes after invoke() returns, so the platform's command (and its undo entry) is
-    // over by the time a choice arrives; the write needs a command of its own and a name for undo.
+    // invoke() returns as soon as the non-modal chooser is shown, so the platform's command (and its
+    // undo entry) is over by the time a choice arrives in onChosen; the write needs its own command
+    // and a name for undo.
     private fun chooseAndProcess(
         project: Project,
         editor: Editor?,

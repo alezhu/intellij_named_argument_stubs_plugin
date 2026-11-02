@@ -123,11 +123,13 @@ symptom first, because that is what you will be staring at.
 - `show(RelativePoint.getSouthWestOf(editor.contentComponent))` anchors the popup to the bottom of the
   editor viewport. `showInBestPositionFor(editor)` puts it at the caret, which is where the user is looking.
 
-- The chooser is opened from inside `invoke()`, so the write action it triggers runs after the popup
-  closes and the intentions popup is gone. Re-read the PSI in that callback (`element.isValid()` and a
-  fresh `Context`) instead of reusing captured elements, and open a command of your own —
-  `writeCommandAction(project).withName(text)` — because the platform's command around `invoke()` has
-  already finished by then; without a name the undo entry reads "Undefined".
+- The chooser is opened from inside `invoke()` and `showInBestPositionFor` is not modal, so `invoke()`
+  returns while the chooser is still on screen and the platform's command around `invoke()` is already
+  over. The write runs inside the step's `onChosen`, before it returns `FINAL_CHOICE`; the popup is
+  disposed only after that return, so do not defer the write until the popup closes. Re-read the PSI
+  in that callback (`element.isValid()` and a fresh `Context`) instead of reusing captured elements,
+  and open a command of your own — `writeCommandAction(project).withName(text)` — because the
+  platform's command is gone; without a name the undo entry reads "Undefined".
   `testNamesTheCommandThatAppliesThePopupChoice` fails without the name.
 
 ## Verifying in a running IDE (Windows)
@@ -185,5 +187,8 @@ The harness lives in the gitignored `build/ui-sample/`: a scratch Kotlin project
 - A unit test guards a bug only if it fails without the fix. For platform behaviour, run the IDE and look
   at it; screenshots and window dumps beat reasoning about the API.
 
-- Do not touch the developer's work in progress (the `build.gradle.kts` srcDir edits, `manual/demo.kt`)
-  and do not commit unless asked.
+- Do not commit unless asked, and never revert or "clean up" changes you did not make.
+
+- `manual/demo.kt` is a hand-run scratch pad, not unfinished work: `manual` is a main `srcDir` so the
+  IDE resolves the calls in it, and `build.gradle.kts` excludes it from compilation and the plugin jar.
+  That wiring is committed and deliberate.
