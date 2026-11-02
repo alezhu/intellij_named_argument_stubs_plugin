@@ -70,18 +70,19 @@ class Context(
      * several mean the user has to pick, none means the intention does not apply.
      *
      * The fit is judged from the call shape alone — arity always, the names actually present only
-     * while the frontend still leaves a choice. Positional arguments fill the leading parameters,
-     * and the parameters left without an argument are the ones to be stubbed. Types are not
-     * compared, so an overload that differs only by argument types stays a candidate and reaches
-     * the chooser instead of being silently guessed.
+     * while the frontend still leaves a choice. Positional arguments fill the leading parameters
+     * (a vararg takes all the rest), and the parameters left without an argument are the ones to be
+     * stubbed. Types are not compared, so an overload that differs only by argument types stays a
+     * candidate and reaches the chooser instead of being silently guessed.
      */
     fun expansionTargets(): List<Overload> {
         val candidates = overloads
         val split = positionalArguments.size
         // Arity applies even to the single candidate the frontend leaves: a declaration that cannot
-        // take every positional argument would make process() drop the extras in silence.
+        // take every positional argument would make process() drop the extras in silence. A vararg
+        // parameter absorbs any number of them.
         val fitting = candidates.filter { overload ->
-            overload.parameters.size >= split
+            overload.parameters.any { it.isVarArg } || overload.parameters.size >= split
         }
         if (candidates.size <= 1) return fitting
 
@@ -104,8 +105,16 @@ class Context(
         for ((index, parameter) in parameters.withIndex()) {
             val name = parameter.name
 
-            val argument = namedArguments[name] ?: positionalArguments.getOrNull(nextPositional++)
-            val value = argument?.getArgumentExpression()?.text ?: parameter.defaultValue?.text ?: name
+            val value = if (parameter.isVarArg) {
+                val elements = positionalArguments.drop(nextPositional)
+                nextPositional = positionalArguments.size
+                namedArguments[name]?.valueText() ?: varargValue(elements)
+            } else {
+                namedArguments[name]?.valueText()
+                    ?: positionalArguments.getOrNull(nextPositional++)?.valueText()
+                    ?: parameter.defaultValue?.text
+                    ?: name
+            }
             newArgumentsArray[index] = "$name = $value,"
         }
 
@@ -117,6 +126,19 @@ class Context(
         )
         val ktNewArguments = factory.createCallArguments(newCallStr)
         argumentList.replace(ktNewArguments as PsiElement)
+    }
+
+    // The spread marker sits outside the expression, so it has to be re-attached by hand.
+    private fun KtValueArgument.valueText(): String? {
+        val expression = getArgumentExpression() ?: return null
+        return if (getSpreadElement() != null) "*${expression.text}" else expression.text
+    }
+
+    private fun varargValue(elements: List<KtValueArgument>): String {
+        // A lone spread already is the array of elements, so wrapping it again would only add noise.
+        elements.singleOrNull()?.takeIf { it.getSpreadElement() != null }?.valueText()?.let { return it }
+        val values = elements.mapNotNull { it.valueText() }
+        return if (values.isEmpty()) "*emptyArray()" else values.joinToString(", ", "*arrayOf(", ")")
     }
 
     private val overloads: List<Overload> by lazy {

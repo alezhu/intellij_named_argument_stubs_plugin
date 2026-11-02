@@ -417,6 +417,59 @@ class NamedArgumentStubsIntentionTest : BasePlatformTestCase() {
         )
     }
 
+    fun testKeepsEveryPositionalArgumentOfAVarargCall() {
+        assertExpanded(
+            usage = "<caret>target(1, \"a\", \"b\")",
+            declarations = "fun target(id: Int, vararg names: String): Boolean = true",
+            expected = """
+                target(
+                    id = 1,
+                    names = *arrayOf("a", "b"),
+                )
+            """.normalize(),
+        )
+    }
+
+    fun testStubsAVarargThatGotNoArgument() {
+        assertExpanded(
+            usage = "<caret>target(1)",
+            declarations = "fun target(id: Int, vararg names: String): Boolean = true",
+            expected = """
+                target(
+                    id = 1,
+                    names = *emptyArray(),
+                )
+            """.normalize(),
+        )
+    }
+
+    // A lone spread already is the array the vararg needs, so it is reused instead of wrapped.
+    fun testKeepsASpreadArgumentAsTheVararg() {
+        assertExpanded(
+            usage = "<caret>target(1, *arrayOf(\"a\", \"b\"))",
+            declarations = "fun target(id: Int, vararg names: String): Boolean = true",
+            expected = """
+                target(
+                    id = 1,
+                    names = *arrayOf("a", "b"),
+                )
+            """.normalize(),
+        )
+    }
+
+    fun testExpandsAVarargBeforeTrailingParameters() {
+        assertExpanded(
+            usage = "<caret>target(\"a\", \"b\")",
+            declarations = "fun target(vararg names: String, active: Boolean = false): Boolean = true",
+            expected = """
+                target(
+                    names = *arrayOf("a", "b"),
+                    active = false,
+                )
+            """.normalize(),
+        )
+    }
+
     private fun source(usage: String, declarations: String) = """
         $declarations
 
