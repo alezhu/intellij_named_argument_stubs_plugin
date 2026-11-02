@@ -10,7 +10,7 @@ junit = "4.13.2"
 kotlin = "2.3.21"
 intelliJPlatform = "2.16.0"
 changelog = "2.5.0"
-libVersionsUpdater = "0.54.0"
+libVersionsUpdater = "0.66.0"
 
 [libraries]
 junit = { group = "junit", name = "junit", version.ref = "junit" }
