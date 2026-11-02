@@ -7,10 +7,12 @@ import com.intellij.psi.PsiPolyVariantReference
 import com.intellij.psi.PsiReference
 import com.intellij.psi.util.PsiTreeUtil
 import org.jetbrains.kotlin.psi.KtCallExpression
+import org.jetbrains.kotlin.psi.KtClass
+import org.jetbrains.kotlin.psi.KtConstructor
 import org.jetbrains.kotlin.psi.KtLambdaArgument
 import org.jetbrains.kotlin.psi.KtNameReferenceExpression
+import org.jetbrains.kotlin.psi.KtNamedFunction
 import org.jetbrains.kotlin.psi.KtParameter
-import org.jetbrains.kotlin.psi.KtParameterList
 import org.jetbrains.kotlin.psi.KtPsiFactory
 import org.jetbrains.kotlin.psi.KtValueArgument
 import org.jetbrains.kotlin.psi.KtValueArgumentList
@@ -241,9 +243,28 @@ class Context(
     private val overloads: List<Overload> by lazy {
         val callee = callExpression?.calleeExpression?.text ?: return@lazy emptyList()
         definitionCandidates.mapNotNull { element ->
-            val parameters = PsiTreeUtil.findChildOfType(element, KtParameterList::class.java)?.parameters
-            parameters?.let { Overload(element, it, signatureOf(it, callee)) }
+            val parameters = element.namedArgumentParameters() ?: return@mapNotNull null
+            Overload(element, parameters, signatureOf(parameters, callee))
         }
+    }
+
+    /**
+     * The parameters named arguments can be generated from, or null when the declaration is not
+     * the callee's own signature. A property or a parameter of a function type resolves to a
+     * [org.jetbrains.kotlin.psi.KtProperty]/[KtParameter], and the first `KtParameterList` inside
+     * one of those belongs to the type `(Int, Int) -> Int` or to the lambda initializing it — its
+     * parameters are unnamed, which is how `null = 1` used to reach the call. Kotlin prohibits named
+     * arguments for function types, so such a callee is refused instead of expanded.
+     */
+    private fun PsiElement.namedArgumentParameters(): List<KtParameter>? {
+        val parameters = when (this) {
+            is KtNamedFunction -> valueParameterList?.parameters
+            is KtConstructor<*> -> valueParameterList?.parameters
+            is KtClass -> primaryConstructor?.valueParameterList?.parameters
+            else -> null
+        } ?: return null
+        // A parameter without a name has no argument name to emit.
+        return parameters.takeIf { list -> list.all { it.name != null } }
     }
 
     private fun signatureOf(parameters: List<KtParameter>, callee: String): String =

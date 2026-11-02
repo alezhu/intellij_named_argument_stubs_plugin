@@ -637,6 +637,41 @@ class NamedArgumentStubsIntentionTest : BasePlatformTestCase() {
         )
     }
 
+    // The callee is a parameter of function type, so it resolves to the KtParameter. The first
+    // KtParameterList inside it is the one of `(Int, Int) -> Int`, whose parameters are unnamed;
+    // expanding it wrote `target(null = 1, null = 2)`. Kotlin prohibits named arguments for a
+    // value of function type, so there is nothing valid to generate.
+    fun testIsNotAvailableWhenTheCalleeIsAParameterOfFunctionType() {
+        assertAvailable(
+            usage = "true",
+            declarations = "fun applyIt(target: (Int, Int) -> Int): Int = tar<caret>get(1, 2)",
+            expected = false,
+        )
+    }
+
+    // Same for a property initialized with a lambda: the first KtParameterList found belongs to
+    // the lambda, not to the call, and named arguments are rejected for function types.
+    fun testIsNotAvailableWhenTheCalleeIsAPropertyOfFunctionType() {
+        assertAvailable(
+            usage = "true",
+            declarations = """
+                val target = { a: Int, b: Int -> a + b }
+                val other = tar<caret>get(1, 2)
+            """.trimIndent(),
+            expected = false,
+        )
+    }
+
+    // A Java method resolves to a PsiMethod, which carries no Kotlin parameter names. That is a
+    // known gap of the Kotlin-PSI-only implementation, and refusing it keeps the call untouched.
+    fun testIsNotAvailableForAJavaMethod() {
+        myFixture.addFileToProject(
+            "J.java",
+            "public class J { public void target(int first, int second) {} }",
+        )
+        assertAvailable(usage = "J().tar<caret>get(1, 2)", declarations = "", expected = false)
+    }
+
     private fun source(usage: String, declarations: String) = """
         $declarations
 

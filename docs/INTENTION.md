@@ -18,6 +18,23 @@ symptom first, because that is what you will be staring at.
   callback gets new PSI elements, but their file and range are unchanged.
   `testAppliesTheChosenDeclarationWhenTwoSignaturesReadTheSame` fails on text matching.
 
+- Only a declaration with a signature of its own is a candidate: a `KtNamedFunction`, a
+  `KtPrimaryConstructor`/`KtSecondaryConstructor`, or a `KtClass` (its primary constructor). Taking
+  the first `KtParameterList` found inside whatever `multiResolve` returned expanded a callee of
+  function type against the wrong list: `fun applyIt(target: (Int, Int) -> Int) = target(1, 2)`
+  resolves the inner `target` to a `KtParameter` whose first list is the `(Int, Int) -> Int` one,
+  with unnamed parameters (`target(null = 1, null = 2)`), and `val target = { a: Int, b: Int -> … }`
+  resolves to a `KtProperty` whose list belongs to the lambda. Kotlin prohibits named arguments for
+  function types, so both are refused, and so is any declaration with an unnamed parameter. Probe
+  evidence: `resolved=[KtParameter] firstList=[null, null]`, `resolved=[KtProperty] firstList=[a, b]`,
+  `resolved=[KtPrimaryConstructor] firstList=[id, name]`.
+
+- A Java method or constructor (`J().target(1, 2)`, `J(1, 2)`) resolves to a `PsiMethod`, not a
+  Kotlin declaration, so there are no parameter names to generate. SDK and library calls such as
+  `s.substring(1, 2)` stay unavailable for the same practical reason: no Kotlin parameter list lives
+  in the project sources. That is a known gap of the Kotlin-PSI-only implementation, not silent data
+  loss — the call is left untouched.
+
 - The Kotlin callee reference usually narrows the candidates before any filter of ours runs. A call
   like `target(1, "2")` against `target(id, name, value = 0.0)` + `target(id, title)` resolves to the
   two-parameter one on its own. Consequence: a shape filter can be pure dead code. Before believing a
