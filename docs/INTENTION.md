@@ -52,6 +52,18 @@ symptom first, because that is what you will be staring at.
 - The fit is deliberately type-blind, so two overloads differing only in parameter types both reach
   the chooser. Do not "fix" that by pulling in the Kotlin analysis API unless it is asked for.
 
+## Rewriting the argument list
+
+- `process()` replaces the whole `KtValueArgumentList` (parameters may be reordered and missing ones
+  stubbed), so nothing inside it survives unless the rebuilt text carries it. Comments between
+  arguments are `PsiComment` children of the list (`target(1, /* one */ "2")`), while a comment inside
+  an argument belongs to that argument (`value = /* before expr */ 3.0`). The first kind has to be
+  copied over by hand — a line comment trails the argument before it, a block comment leads the
+  argument after it — and the second survives only because an existing argument contributes its whole
+  `text`, not just the expression's. Building the new list from `valueText()` dropped both.
+  `testKeepsACommentBetweenArguments`, `testKeepsLineCommentsThatFollowArguments` and
+  `testKeepsACommentInsideAnAlreadyNamedArgument` fail on that earlier code.
+
 ## What the availability check costs
 
 - Measured in the fixture, `isAvailable()` on a fresh `Context`, first call and then a repeat: a callee
