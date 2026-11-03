@@ -6,12 +6,16 @@ import org.jetbrains.kotlin.psi.KtParameter
 
 /**
  * A declaration identified by its place in a file. PSI elements are recreated on re-resolution,
- * their file and range are not, so the pair survives the popup round-trip.
+ * their file and range are not, so the tuple survives the popup round-trip. The file name covers
+ * synthetic and light declarations, which report no virtual file: without it, two of them with the
+ * same range would collapse into one.
  */
-internal typealias DeclarationKey = Pair<String?, TextRange>
+internal typealias DeclarationKey = Triple<String?, String?, TextRange>
 
-internal fun PsiElement.declarationKey(): DeclarationKey =
-    containingFile?.virtualFile?.path to textRange
+internal fun PsiElement.declarationKey(): DeclarationKey {
+    val file = containingFile
+    return Triple(file?.virtualFile?.path, file?.name, textRange)
+}
 
 /**
  * One declaration the call could be expanded against: [parameters] drive the stubs and
