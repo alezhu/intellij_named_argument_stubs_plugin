@@ -69,12 +69,12 @@ class Context(
 
     // A trailing lambda is a child of the call, not an entry of valueArgumentList, and it always
     // fills the last parameter. Broken code can parse more than one, which has no sane mapping.
-    private val trailingLambdaSlots: Int by lazy {
-        when (lambdaArguments.size) {
-            0 -> 0
-            1 -> 1
-            else -> -1
-        }
+    private val trailingLambda: KtLambdaArgument? by lazy {
+        lambdaArguments.singleOrNull()
+    }
+
+    private val tooManyTrailingLambdas: Boolean by lazy {
+        lambdaArguments.size > 1
     }
 
     /**
@@ -89,10 +89,10 @@ class Context(
      * silently guessed.
      */
     fun expansionTargets(): List<Overload> {
+        if (tooManyTrailingLambdas) return emptyList()
         val candidates = overloads
         val split = positionalArguments.size
-        val lambdaSlots = trailingLambdaSlots
-        if (lambdaSlots < 0) return emptyList()
+        val lambdaSlots = if (trailingLambda != null) 1 else 0
         // Arity applies even to the single candidate the frontend leaves: a declaration that cannot
         // take every positional argument would make process() drop the extras in silence. A leading
         // vararg absorbs any number of them. The trailing lambda reserves the last parameter, so
@@ -113,7 +113,7 @@ class Context(
     // The trailing lambda is already an argument of the last parameter, so it counts as one filled
     // slot and must not be stubbed a second time.
     fun isAvailable(): Boolean {
-        val lambdaSlots = trailingLambdaSlots
+        val lambdaSlots = if (trailingLambda != null) 1 else 0
         return expansionTargets().any { it.parameters.size != namedArguments.size + lambdaSlots }
     }
 
@@ -128,7 +128,7 @@ class Context(
         val sourceArguments = argumentList.arguments
         val named = sourceArguments.namedByName()
         val positional = sourceArguments.filterNot { it.isNamed() }
-        val lambdaFilledIndex = if (trailingLambdaSlots == 1) parameters.lastIndex else -1
+        val lambdaFilledIndex = if (trailingLambda != null) parameters.lastIndex else -1
 
         val slots = ArrayList<ArgumentSlot>(parameters.size)
         var nextPositional = 0
