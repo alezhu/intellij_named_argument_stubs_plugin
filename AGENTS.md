@@ -9,6 +9,22 @@ already narrows the candidates, and the Windows-specific traps that cost real de
 UI harness (`WS_EX_NOREDIRECTIONBITMAP` popups invisible to screen captures, DPI-virtualized rects,
 silent focus loss, sandbox file locks).
 
+## Changelog
+
+Update the `[Unreleased]` section of [CHANGELOG.md](CHANGELOG.md) in the same commit as every
+user-visible change, not at release time. User-visible means what the plugin does in the IDE: the
+intention row appearing or not, what the call turns into, supported Kotlin constructs and IDE
+versions. Refactors, tests, docs and CI stay out.
+
+Write for a plugin user, not an implementer, and in English: name the effect, not the generated
+expression behind it ("support vararg parameters", not `*arrayOf(...)`). No PSI, class or method
+names, and no explanation of the internal cause. One line per change under the usual
+`Added`/`Changed`/`Fixed` heading.
+
+Before committing, reread `[Unreleased]` and delete entries that no longer describe the change —
+reverted, replaced by another fix, or otherwise never shipped to users. A change users never saw is
+not a changelog item.
+
 ## Releases
 
 Before preparing a release — including creating or merging a `release/*` branch — read

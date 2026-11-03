@@ -8,10 +8,13 @@
 
 - Ask which overload the call means when several fit instead of generating names from the first one.
 - Preview the expansion in the intention popup when exactly one overload fits.
+- Support functions with a `vararg` parameter.
 
 ### Fixed
 
 - Do not offer the intention for a call without a parenthesised argument list (`target { }`).
+- Do not offer the intention when a call passes more arguments than the function takes; expanding it used to drop the extra arguments silently.
+- Keep comments in the call's argument list when it is expanded instead of dropping them.
 - Keep a trailing lambda out of the generated named arguments instead of stubbing its parameter twice.
 - Do not expand a call through a function-type value (`target(1, 2)` where `target` is a callback or a lambda), which produced `null = …` names or named arguments Kotlin prohibits.
 
