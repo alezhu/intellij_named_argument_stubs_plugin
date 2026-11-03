@@ -487,6 +487,20 @@ class NamedArgumentStubsIntentionTest : BasePlatformTestCase() {
         )
     }
 
+    // A comment before the first argument has nothing to trail, so it leads that argument.
+    fun testKeepsACommentBeforeTheFirstArgument() {
+        assertExpanded(
+            usage = "<caret>target(/* first */ 1, \"2\")",
+            expected = """
+                target(
+                    /* first */ id = 1,
+                    name = "2",
+                    value = 0.0,
+                )
+            """.normalize(),
+        )
+    }
+
     // A line comment runs to the end of the line, so it belongs to the argument before it.
     fun testKeepsLineCommentsThatFollowArguments() {
         val usage = """

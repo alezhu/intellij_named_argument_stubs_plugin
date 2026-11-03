@@ -199,14 +199,16 @@ class Context(
         val trailingComments = ArrayList<String>()
 
         for (comment in comments) {
+            // -1 is "nothing found" from indexOfLast/indexOfFirst; it must not be compared with a
+            // sourceIndices entry, which may itself hold -1 and would then match by accident.
             val previous = sourceArguments.indexOfLast {
                 it.textRange.endOffset <= comment.textRange.startOffset
-            }
+            }.takeIf { it >= 0 }
             val next = sourceArguments.indexOfFirst {
                 it.textRange.startOffset >= comment.textRange.endOffset
-            }
-            val previousSlot = slots.firstOrNull { previous in it.sourceIndices }
-            val nextSlot = slots.firstOrNull { next in it.sourceIndices }
+            }.takeIf { it >= 0 }
+            val previousSlot = previous?.let { index -> slots.firstOrNull { index in it.sourceIndices } }
+            val nextSlot = next?.let { index -> slots.firstOrNull { index in it.sourceIndices } }
             when {
                 comment.text.startsWith("//") && previousSlot != null ->
                     previousSlot.trailingComments += comment.text
