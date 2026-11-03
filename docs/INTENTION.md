@@ -81,6 +81,12 @@ symptom first, because that is what you will be staring at.
   `testKeepsACommentBetweenArguments`, `testKeepsLineCommentsThatFollowArguments` and
   `testKeepsACommentInsideAnAlreadyNamedArgument` fail on that earlier code.
 
+- Slots reference a source argument by its index in one `valueArgumentList.arguments` list, and that
+  list is built once per `process()` call and reused for the named/positional lookups. Do not take a
+  second snapshot there: `indexOf` on PSI elements is an identity lookup, and it only finds a match
+  while both the element and the list come from the same `arguments` call. That held by accident when
+  the named map came from the lazy property and the indices from a fresh read inside `process()`.
+
 ## What the availability check costs
 
 - Measured in the fixture, `isAvailable()` on a fresh `Context`, first call and then a repeat: a callee

@@ -51,24 +51,16 @@ class Context(
         refParent as? KtCallExpression
     }
 
-    private val arguments: List<KtValueArgument>? by lazy {
-        val ktArguments = callExpression?.valueArgumentList
-        ktArguments?.arguments
+    private val arguments: List<KtValueArgument> by lazy {
+        callExpression?.valueArgumentList?.arguments.orEmpty()
     }
 
-    private val namedArguments: HashMap<String, KtValueArgument> by lazy {
-        val namedArguments = HashMap<String, KtValueArgument>()
-        arguments?.forEach { argument ->
-            if (argument.isNamed()) {
-                val name = argument.getArgumentName()?.asName?.identifier ?: return@forEach
-                namedArguments[name] = argument
-            }
-        }
-        namedArguments
+    private val namedArguments: Map<String, KtValueArgument> by lazy {
+        arguments.namedByName()
     }
 
     private val positionalArguments: List<KtValueArgument> by lazy {
-        arguments?.filterNot { it.isNamed() }.orEmpty()
+        arguments.filterNot { it.isNamed() }
     }
 
     private val lambdaArguments: List<KtLambdaArgument> by lazy {
@@ -130,7 +122,12 @@ class Context(
         val parameters = overload.parameters
         val call = callExpression ?: return
         val argumentList = call.valueArgumentList ?: return
+        // One snapshot for the whole rewrite. The slots reference arguments by their index in this
+        // very list, so indexOf() is an identity lookup inside a single list, not across two lists
+        // built by separate calls to `arguments`.
         val sourceArguments = argumentList.arguments
+        val named = sourceArguments.namedByName()
+        val positional = sourceArguments.filterNot { it.isNamed() }
         val lambdaFilledIndex = if (trailingLambdaSlots == 1) parameters.lastIndex else -1
 
         val slots = ArrayList<ArgumentSlot>(parameters.size)
@@ -140,15 +137,15 @@ class Context(
             // The lambda stays outside the list being replaced; its parameter is this skipped slot.
             if (index == lambdaFilledIndex) continue
             val name = parameter.name
-            val named = namedArguments[name]
+            val argument = named[name]
 
             val slot = when {
-                named != null ->
-                    ArgumentSlot(named.text, listOf(sourceArguments.indexOf(named)))
+                argument != null ->
+                    ArgumentSlot(argument.text, listOf(sourceArguments.indexOf(argument)))
 
                 parameter.isVarArg -> {
-                    val elements = positionalArguments.drop(nextPositional)
-                    nextPositional = positionalArguments.size
+                    val elements = positional.drop(nextPositional)
+                    nextPositional = positional.size
                     val indices = elements.map { sourceArguments.indexOf(it) }
                     val text = when {
                         elements.isEmpty() -> "$name = *emptyArray()"
@@ -161,8 +158,8 @@ class Context(
                     ArgumentSlot(text, indices)
                 }
 
-                nextPositional < positionalArguments.size -> {
-                    val argument = positionalArguments[nextPositional++]
+                nextPositional < positional.size -> {
+                    val argument = positional[nextPositional++]
                     ArgumentSlot("$name = ${argument.text}", listOf(sourceArguments.indexOf(argument)))
                 }
 
@@ -199,8 +196,7 @@ class Context(
         val trailingComments = ArrayList<String>()
 
         for (comment in comments) {
-            // -1 is "nothing found" from indexOfLast/indexOfFirst; it must not be compared with a
-            // sourceIndices entry, which may itself hold -1 and would then match by accident.
+            // -1 means no argument lies on that side of the comment, so there is no index to look up.
             val previous = sourceArguments.indexOfLast {
                 it.textRange.endOffset <= comment.textRange.startOffset
             }.takeIf { it >= 0 }
@@ -271,6 +267,16 @@ class Context(
 
     private fun signatureOf(parameters: List<KtParameter>, callee: String): String =
         parameters.joinToString(", ", "$callee(", ")") { it.flatText() }
+
+    private fun List<KtValueArgument>.namedByName(): Map<String, KtValueArgument> {
+        val named = HashMap<String, KtValueArgument>()
+        for (argument in this) {
+            if (!argument.isNamed()) continue
+            val name = argument.getArgumentName()?.asName?.identifier ?: continue
+            named[name] = argument
+        }
+        return named
+    }
 
     private fun KtParameter.flatText(): String = text.replace(Regex("\\s+"), " ").trim()
 }
