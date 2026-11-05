@@ -29,11 +29,20 @@ symptom first, because that is what you will be staring at.
   evidence: `resolved=[KtParameter] firstList=[null, null]`, `resolved=[KtProperty] firstList=[a, b]`,
   `resolved=[KtPrimaryConstructor] firstList=[id, name]`.
 
+  Library declarations are not light wrappers on 2026.2.4: a stdlib or kotlinx call resolves to
+  ordinary PSI from the decompiler's `KtClsFile` stub source, so the same whitelist accepts it
+  (probe: `buildString(100) { }` and `delay(500)` → `KtNamedFunction` with parameters
+  `capacity`/`builderAction` and `timeMillis`, `Pair(1, 2)` → `KtPrimaryConstructor`). Neither 2023.3
+  nor 2026.2.4 contains a `KtLightCallableDeclaration` class at all, so the light-declaration theory
+  does not explain a refusal on either. The fixture needs the jars attached to show this; see the
+  probing notes below.
+
 - A Java method or constructor (`J().target(1, 2)`, `J(1, 2)`) resolves to a `PsiMethod`, not a
-  Kotlin declaration, so there are no parameter names to generate. SDK and library calls such as
-  `s.substring(1, 2)` stay unavailable for the same practical reason: no Kotlin parameter list lives
-  in the project sources. That is a known gap of the Kotlin-PSI-only implementation, not silent data
-  loss — the call is left untouched.
+  Kotlin declaration, so there are no parameter names to generate and the call is left untouched.
+  That is the only known gap of the Kotlin-PSI-only implementation: Kotlin library calls are not
+  excluded. `s.substring(1, 2)` is a `kotlin.text` extension in Kotlin, resolves to a
+  `KtNamedFunction` and expands to `startIndex`/`endIndex` on 2026.2.4; only a genuinely Java method
+  such as `J().target(1, 2)` answers with `PsiMethodImpl` and stays unavailable.
 
 - The Kotlin callee reference usually narrows the candidates before any filter of ours runs. A call
   like `target(1, "2")` against `target(id, name, value = 0.0)` + `target(id, title)` resolves to the
@@ -119,6 +128,19 @@ symptom first, because that is what you will be staring at.
   wraps the usage in `val usage = …`, so `val f = ::target` becomes `val usage = val f = ::target` and the
   PSI you dump is an error element rather than what the IDE sees. Write probe usages as complete
   expressions (`::target`, `Pair(1, target)`), and check the file parses before believing a dump.
+
+- The default fixture has no stdlib, so `listOf` and `Pair` are unresolved and it can say nothing about
+  library declarations. Attach the IDE's own jars in a `LightProjectDescriptor`:
+  `PsiTestUtil.addLibrary(model, "kotlin-stdlib", jar.parent, jar.name)`. The method takes a directory
+  plus jar names inside it; passing the jar path as that directory silently creates an empty library
+  (`entry invalid=true`, every reference still unresolved). The jars live at
+  `<PathManager.getHomePath()>/plugins/Kotlin/kotlinc/lib/kotlin-stdlib.jar` and
+  `<home>/lib/intellij.libraries.kotlinx.coroutines.core.jar`.
+
+- `PsiTreeUtil.getParentOfType(element, KtNameReferenceExpression::class.java)` is strict, so pass the
+  identifier leaf as the caret does, not the `KtNameReferenceExpression` itself. Given the callee node
+  the lookup returns null, `Context` sees no call, and `expansionTargets()` is empty even though
+  resolution works — a probe that looks like "libraries are refused" when the filter never ran.
 
 ## Preview in the intentions popup
 
