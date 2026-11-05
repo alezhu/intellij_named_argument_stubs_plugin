@@ -1,45 +1,95 @@
+import org.gradle.api.logging.Logging
 import org.jetbrains.changelog.Changelog
 import org.jetbrains.changelog.markdownToHTML
 import org.jetbrains.intellij.platform.gradle.IntelliJPlatformType
 import org.jetbrains.intellij.platform.gradle.TestFrameworkType
 import org.jetbrains.intellij.platform.gradle.extensions.intellijPlatform
+import java.io.IOException
 import java.net.URI
 import java.net.http.HttpClient
 import java.net.http.HttpRequest
 import java.net.http.HttpResponse
 import java.time.Duration
+import java.util.Properties
 
 fun properties(key: String) = providers.gradleProperty(key)
 fun environment(key: String) = providers.environmentVariable(key)
 
-// Resolves the newest Android Studio release of a feed channel ("Release" or "Canary") from the
-// official releases feed, so the verifier matrix and its runIde twins never carry a pinned canary
-// number that silently ages. The feed is newest-first, so the first matching item wins.
-abstract class AndroidStudioLatestVersion : ValueSource<String, AndroidStudioLatestVersion.Params> {
+// Newest Android Studio build of each feed channel, from the official releases feed. One result
+// carries both channels, and a ValueSource is obtained once per provider instance, so the verifier
+// matrix and its runIde twins share a single download of the feed instead of one per call site.
+// An unreachable feed, or a channel missing from it, falls back to the pinned build below, so an
+// offline build still configures instead of failing before `--offline` even applies.
+abstract class AndroidStudioVersions : ValueSource<Map<String, String>, AndroidStudioVersions.Params> {
     interface Params : ValueSourceParameters {
-        val channel: Property<String>
+        val releaseFallback: Property<String>
+        val canaryFallback: Property<String>
     }
 
-    override fun obtain(): String {
-        val client = HttpClient.newBuilder().followRedirects(HttpClient.Redirect.NORMAL).build()
-        val request = HttpRequest.newBuilder(URI.create("https://jb.gg/android-studio-releases-list.xml"))
-            .timeout(Duration.ofMinutes(2)).GET().build()
-        val xml = client.send(request, HttpResponse.BodyHandlers.ofString()).body()
-        val channel = Regex("<channel>\\s*${Regex.escape(parameters.channel.get())}\\s*</channel>")
-        return Regex("<item>(.*?)</item>", RegexOption.DOT_MATCHES_ALL)
-            .findAll(xml)
-            .filter { channel.containsMatchIn(it.value) }
-            .mapNotNull { Regex("<version>([^<]+)</version>").find(it.value)?.groupValues?.get(1)?.trim() }
-            .firstOrNull()
-            ?: throw GradleException(
-                "No '${parameters.channel.get()}' Android Studio release in " +
-                    "https://jb.gg/android-studio-releases-list.xml"
-            )
+    override fun obtain(): Map<String, String> {
+        val fetched = try {
+            newestVersions(fetchFeed())
+        } catch (e: IOException) {
+            logger.warn("Android Studio releases feed $FEED unavailable, pinned builds are used: $e")
+            emptyMap()
+        } catch (e: InterruptedException) {
+            Thread.currentThread().interrupt()
+            logger.warn("Android Studio releases feed request interrupted, pinned builds are used")
+            emptyMap()
+        }
+        val fallback = mapOf(
+            "Release" to parameters.releaseFallback.get(),
+            "Canary" to parameters.canaryFallback.get(),
+        )
+        return fallback.mapValues { (channel, pinned) ->
+            fetched[channel] ?: pinned.also {
+                if (fetched.isNotEmpty()) {
+                    logger.warn("No '$channel' Android Studio build in the feed, pinned $pinned is used")
+                }
+            }
+        }
+    }
+
+    private fun fetchFeed(): String {
+        val client = HttpClient.newBuilder()
+            .connectTimeout(Duration.ofSeconds(15))
+            .followRedirects(HttpClient.Redirect.NORMAL)
+            .build()
+        val request = HttpRequest.newBuilder(URI.create(FEED))
+            .timeout(Duration.ofSeconds(20))
+            .GET()
+            .build()
+        try {
+            val response = client.send(request, HttpResponse.BodyHandlers.ofString())
+            // An error page has a real body, so without this check it parses as "no versions" and
+            // the pinned fallback silently hides a broken feed.
+            if (response.statusCode() != 200) throw IOException("HTTP ${response.statusCode()} from $FEED")
+            return response.body()
+        } finally {
+            // The Kotlin DSL compiles this script against the Java 17 API, where HttpClient is not
+            // AutoCloseable yet (it became one in 21), hence the cast. Left open, it keeps its
+            // selector thread alive in the daemon between builds.
+            (client as? AutoCloseable)?.close()
+        }
+    }
+
+    // The feed is newest-first, so the first item of a channel is its newest build.
+    private fun newestVersions(xml: String): Map<String, String> = CHANNELS.mapNotNull { channel ->
+        val marker = Regex("<channel>\\s*${Regex.escape(channel)}\\s*</channel>")
+        val item = ITEM.findAll(xml).map { it.value }.firstOrNull { marker.containsMatchIn(it) }
+            ?: return@mapNotNull null
+        VERSION.find(item)?.groupValues?.get(1)?.trim()?.let { channel to it }
+    }.toMap()
+
+    private val logger = Logging.getLogger(AndroidStudioVersions::class.java)
+
+    companion object {
+        private const val FEED = "https://jb.gg/android-studio-releases-list.xml"
+        private val CHANNELS = listOf("Release", "Canary")
+        private val ITEM = Regex("<item>(.*?)</item>", RegexOption.DOT_MATCHES_ALL)
+        private val VERSION = Regex("<version>([^<]+)</version>")
     }
 }
-
-fun androidStudioLatest(channel: String) =
-    providers.of(AndroidStudioLatestVersion::class.java) { parameters.channel.set(channel) }
 
 plugins {
     id("java") // Java support
@@ -54,6 +104,15 @@ plugins {
 group = properties("pluginGroup").get()
 version = properties("pluginVersion").get()
 val platformVersion = properties("platformVersion")
+
+// The pinned builds are only a fallback for an unreachable feed, never the normal source: refresh
+// them from the feed when the verifier reports that one of them no longer resolves.
+val androidStudioVersions = providers.of(AndroidStudioVersions::class.java) {
+    parameters.releaseFallback.set("2026.2.2.8")
+    parameters.canaryFallback.set("2026.2.3.2")
+}
+val androidStudioRelease = androidStudioVersions.map { it.getValue("Release") }
+val androidStudioCanary = androidStudioVersions.map { it.getValue("Canary") }
 
 // Set the JVM language level used to build the project.
 kotlin {
@@ -155,12 +214,13 @@ intellijPlatform {
             // reference, since the compile classpath can no longer exclude it. Android Studio joins
             // as the third-party host whose bundled Kotlin plugin most often diverges from the IDE's;
             // its versions follow the official feed (https://jb.gg/android-studio-releases-list.xml),
-            // so newest stable and newest canary need no re-pinning.
+            // so newest stable and newest canary need no re-pinning; only the offline fallback is
+            // pinned.
             create(IntelliJPlatformType.IntellijIdeaCommunity, "2023.3")
             create(IntelliJPlatformType.IntellijIdeaCommunity, "2025.2.5")
             create(IntelliJPlatformType.IntellijIdea, "2026.2.4")
-            create(IntelliJPlatformType.AndroidStudio, androidStudioLatest("Release"))
-            create(IntelliJPlatformType.AndroidStudio, androidStudioLatest("Canary"))
+            create(IntelliJPlatformType.AndroidStudio, androidStudioRelease)
+            create(IntelliJPlatformType.AndroidStudio, androidStudioCanary)
         }
     }
 
@@ -192,12 +252,15 @@ tasks {
     }
 
     patchPluginXml {
+        // Only the section being released: the full archive would grow plugin.xml on every release,
+        // and Marketplace/IDE show these notes as "What's new" for the current update only.
         changeNotes = provider {
-            changelog.getAll()
-                .filter { !it.value.isUnreleased }
-                .map {
-                    changelog.renderItem(it.value, Changelog.OutputType.HTML)
-                }.joinToString()
+            val item = changelog.getAll().values
+                .firstOrNull {
+                    it.isUnreleased && (it.summary.isNotEmpty() || it.sections.any { (_, v) -> v.isNotEmpty() })
+                }
+                ?: changelog.getLatest()
+            changelog.renderItem(item, Changelog.OutputType.HTML)
         }
     }
 
@@ -214,6 +277,17 @@ tasks {
 
 }
 
+
+// `runIdeOnLocalIdea` runs the developer's installed IDE, so pre-release builds that are not on the
+// installer CDN can be tried without a second download. The path cannot be committed, so it comes
+// from -PlocalIdeaPath or `localIdeaPath=` in the untracked local.properties; without it the task is
+// not registered at all, so CI and other machines do not get a task that can only fail on a missing
+// installation.
+val localIdeaPath: Provider<String> = properties("localIdeaPath").orElse(
+    providers.fileContents(layout.projectDirectory.file("local.properties")).asText.map { text ->
+        Properties().apply { load(text.reader()) }.getProperty("localIdeaPath").orEmpty()
+    },
+).map { it.trim() }
 
 intellijPlatformTesting {
     runIde {
@@ -251,7 +325,13 @@ intellijPlatformTesting {
         onMatrixIde("runIdeOnIdea2023", IntelliJPlatformType.IntellijIdeaCommunity, "2023.3")
         onMatrixIde("runIdeOnIdeaCommunity2025", IntelliJPlatformType.IntellijIdeaCommunity, "2025.2.5")
         onMatrixIde("runIdeOnIdeaLatest", IntelliJPlatformType.IntellijIdea, "2026.2.4")
-        onMatrixIde("runIdeOnAndroidStudio", IntelliJPlatformType.AndroidStudio, androidStudioLatest("Release"))
-        onMatrixIde("runIdeOnAndroidStudioCanary", IntelliJPlatformType.AndroidStudio, androidStudioLatest("Canary"))
+        onMatrixIde("runIdeOnAndroidStudio", IntelliJPlatformType.AndroidStudio, androidStudioRelease)
+        onMatrixIde("runIdeOnAndroidStudioCanary", IntelliJPlatformType.AndroidStudio, androidStudioCanary)
+
+        localIdeaPath.orNull?.takeIf { it.isNotEmpty() }?.let { path ->
+            register("runIdeOnLocalIdea") {
+                localPath.set(file(path))
+            }
+        }
     }
 }

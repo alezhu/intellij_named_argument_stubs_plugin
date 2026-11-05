@@ -28,15 +28,16 @@ and `runIde` reuses the sandbox for that version. This is expected for this sche
   If a release for that tag already exists, the Build workflow skips the draft with a notice (main
   normally keeps the previous version until the next bump); if only the tag exists, the Build
   workflow fails instead of creating a draft against that older commit.
-- Add the release notes to the `[Unreleased]` section of `CHANGELOG.md`. `patchChangelog` stamps a
-  heading with the first three segments, so a section for that version must not already exist.
+- Make sure the `[Unreleased]` section of `CHANGELOG.md` covers every user-visible change of this
+  release; the notes are built from it. `patchChangelog` stamps a heading with the first three
+  segments, so a section for that version must not already exist.
 - The `PUBLISH_TOKEN`, `CERTIFICATE_CHAIN`, `PRIVATE_KEY` and `PRIVATE_KEY_PASSWORD` repository
   secrets must be present, otherwise `publishPlugin` fails during signing or upload.
 
 ## Release procedure
 
 1. Raise the first three segments in `gradle.properties` (`1.0.8.SNAPSHOT` → `1.0.9.SNAPSHOT`).
-2. Fill in `[Unreleased]` in `CHANGELOG.md`.
+2. Review `[Unreleased]` in `CHANGELOG.md`: add anything missing and remove stale entries.
 3. Merge to `main`. The Build workflow runs `buildPlugin`, then `test` runs `check` and `verify` runs
    `verifyPlugin` (IntelliJ Plugin Verifier over the IDE builds listed in `build.gradle.kts`; allow ~25 min,
    the Community targets are what catch an accidental Ultimate-only API reference), and only then

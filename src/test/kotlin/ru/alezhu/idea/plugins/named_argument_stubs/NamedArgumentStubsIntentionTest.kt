@@ -2,8 +2,12 @@ package ru.alezhu.idea.plugins.named_argument_stubs
 
 import com.intellij.codeInsight.intention.preview.IntentionPreviewInfo
 import com.intellij.codeInsight.intention.preview.IntentionPreviewUtils
+import com.intellij.openapi.command.CommandEvent
+import com.intellij.openapi.command.CommandListener
 import com.intellij.openapi.command.WriteCommandAction
 import com.intellij.openapi.editor.Editor
+import com.intellij.openapi.project.IndexNotReadyException
+import com.intellij.openapi.project.Project
 import com.intellij.psi.PsiDocumentManager
 import com.intellij.psi.PsiElement
 import com.intellij.psi.PsiFile
@@ -247,6 +251,61 @@ class NamedArgumentStubsIntentionTest : BasePlatformTestCase() {
         )
     }
 
+    // The popup lists flattened signatures, so two declarations can read the same. The choice must
+    // still land on the declaration it was made for, identified by file and range, not by that text.
+    fun testAppliesTheChosenDeclarationWhenTwoSignaturesReadTheSame() {
+        val declarations = listOf(
+            "fun target(id: Int, s: String = \"\"\"a\nb\"\"\"): Boolean = true",
+            "fun target(id: Int, s: String = \"\"\"a b\"\"\"): Boolean = false",
+        ).joinToString("\n")
+        configure("<caret>target(1)", declarations)
+        val chooser = RecordingChooser { it.last() }
+        val intention = NamedArgumentStubsIntention().apply { overloadChooser = chooser }
+
+        intention.invoke(project, myFixture.editor, elementAtCaret())
+        PsiDocumentManager.getInstance(project).commitAllDocuments()
+
+        assertEquals(
+            "The chooser preconditions changed: both rows must read the same",
+            1,
+            chooser.offered.orEmpty().map { it.signature }.distinct().size,
+        )
+        assertEquals(2, chooser.offered.orEmpty().size)
+
+        val expanded = callRawText("target")
+        assertTrue(
+            "Expected the default of the chosen declaration, got:\n$expanded",
+            expanded.contains("s = \"\"\"a b\"\"\""),
+        )
+        assertFalse(
+            "The default of the other declaration leaked in:\n$expanded",
+            expanded.contains("\"\"\"a\nb\"\"\""),
+        )
+    }
+
+    // The intention's own command is over by the time the popup reports a choice, so the callback
+    // has to open a named command or the write lands in undo as an unnamed entry.
+    fun testNamesTheCommandThatAppliesThePopupChoice() {
+        configure("<caret>target(1, \"2\")", AMBIGUOUS_DECLARATIONS)
+        val intention = NamedArgumentStubsIntention().apply {
+            overloadChooser = RecordingChooser { it.first() }
+        }
+        val started = mutableListOf<String?>()
+        project.messageBus.connect(testRootDisposable).subscribe(
+            CommandListener.TOPIC,
+            object : CommandListener {
+                override fun commandStarted(event: CommandEvent) {
+                    started += event.commandName
+                }
+            },
+        )
+
+        intention.invoke(project, myFixture.editor, elementAtCaret())
+        PsiDocumentManager.getInstance(project).commitAllDocuments()
+
+        assertEquals(listOf("Add named argument stubs"), started)
+    }
+
     fun testLeavesTheCallUntouchedWhenThePopupIsCancelled() {
         val expanded = invokeOn("<caret>target(1, \"2\")", AMBIGUOUS_DECLARATIONS, RecordingChooser { null })
 
@@ -272,21 +331,16 @@ class NamedArgumentStubsIntentionTest : BasePlatformTestCase() {
         assertNull("No choice offered for an unambiguous call", chooser.offered)
     }
 
-    // An argument name that exists in neither overload leaves the frontend with one
-    // closest candidate; the intention follows it instead of refusing outright.
-    fun testExpandsToTheCandidateLeftWhenNoOverloadMatchesTheNames() {
-        assertExpanded(
+    // An argument name that exists in neither overload still leaves the frontend with one closest
+    // candidate. Following it would rewrite the list without `unknown = "2"`, so the row stays out.
+    fun testIsNotAvailableWhenANamedArgumentMatchesNoParameter() {
+        assertAvailable(
             usage = "<caret>target(1, unknown = \"2\")",
             declarations = """
                 fun target(id: Int, name: String, value: Double = 0.0): Boolean = true
                 fun target(id: Int, title: String): Boolean = false
             """.trimIndent(),
-            expected = """
-                target(
-                    id = 1,
-                    title = title,
-                )
-            """.normalize(),
+            expected = false,
         )
     }
 
@@ -364,6 +418,22 @@ class NamedArgumentStubsIntentionTest : BasePlatformTestCase() {
         assertEquals("target(1, \"2\")", previewed)
     }
 
+    // The row is offered after isAvailable() resolved, but indexing can start again before the
+    // preview body runs. The panel disappears instead of the exception escaping out of the popup.
+    fun testPreviewsNothingWhenTheIndexIsNotReady() {
+        configure("<caret>target(1, \"2\")")
+        val copy = IntentionPreviewUtils.obtainCopyForPreview(myFixture.file)
+        val intention = NamedArgumentStubsIntention()
+        intention.previewBody = { _, _, _ -> throw IndexNotReadyException.create() }
+
+        lateinit var info: IntentionPreviewInfo
+        IntentionPreviewUtils.previewSession(myFixture.editor) {
+            info = intention.generatePreview(project, myFixture.editor, copy)
+        }
+
+        assertSame(IntentionPreviewInfo.EMPTY, info)
+    }
+
     fun testLeavesTheOriginalCallUntouchedWhenPreviewing() {
         configure("<caret>target(1, \"2\")", DEFAULT_DECLARATIONS)
         preview("<caret>target(1, \"2\")", DEFAULT_DECLARATIONS)
@@ -407,6 +477,267 @@ class NamedArgumentStubsIntentionTest : BasePlatformTestCase() {
             """.trimIndent(),
             expected = false,
         )
+    }
+
+    fun testIsNotAvailableWhenTheOnlyOverloadTakesFewerArguments() {
+        assertAvailable(
+            usage = "<caret>target(1, \"2\", 3.0)",
+            declarations = "fun target(id: Int, name: String): Boolean = true",
+            expected = false,
+        )
+    }
+
+    // The named argument occupies `id`, so `name` is the only slot left for the two positional
+    // arguments. Counting every parameter as a slot offered the expansion and dropped `2`.
+    fun testIsNotAvailableWhenANamedArgumentLeavesTooFewSlotsForPositionalOnes() {
+        assertAvailable(
+            usage = "<caret>target(id = 1, \"2\", 3.0)",
+            declarations = "fun target(id: Int, name: String): Boolean = true",
+            expected = false,
+        )
+    }
+
+    // Same shape with the positional arguments first: `id` is taken by name, so one of `1` and `2`
+    // has nowhere to go.
+    fun testIsNotAvailableWhenAPositionalArgumentFillsNoSlotAfterANamedOne() {
+        assertAvailable(
+            usage = "<caret>target(1, 2, id = 3)",
+            declarations = "fun target(id: Int, name: String): Boolean = true",
+            expected = false,
+        )
+    }
+
+    fun testKeepsACommentBetweenArguments() {
+        assertExpanded(
+            usage = "<caret>target(1, /* name */ \"2\")",
+            expected = """
+                target(
+                    id = 1,
+                    /* name */ name = "2",
+                    value = 0.0,
+                )
+            """.normalize(),
+        )
+    }
+
+    // A comment before the first argument has nothing to trail, so it leads that argument.
+    fun testKeepsACommentBeforeTheFirstArgument() {
+        assertExpanded(
+            usage = "<caret>target(/* first */ 1, \"2\")",
+            expected = """
+                target(
+                    /* first */ id = 1,
+                    name = "2",
+                    value = 0.0,
+                )
+            """.normalize(),
+        )
+    }
+
+    // A line comment runs to the end of the line, so it belongs to the argument before it.
+    fun testKeepsLineCommentsThatFollowArguments() {
+        val usage = """
+            <caret>target(
+                1, // id
+                "2", // name
+            )
+        """.trimIndent()
+        invokeOn(usage, DEFAULT_DECLARATIONS, RecordingChooser { it.first() })
+
+        assertEquals(
+            """
+            target(
+            id = 1, // id
+            name = "2", // name
+            value = 0.0,
+            )
+            """.trimIndent(),
+            callRawText("target").trimIndentPerLine(),
+        )
+    }
+
+    // This comment is inside the argument, so it travels with the argument's own text.
+    fun testKeepsACommentInsideAnAlreadyNamedArgument() {
+        assertExpanded(
+            usage = "<caret>target(1, value = /* keep */ 3.0)",
+            expected = """
+                target(
+                    id = 1,
+                    name = name,
+                    value = /* keep */ 3.0,
+                )
+            """.normalize(),
+        )
+    }
+
+    fun testKeepsEveryPositionalArgumentOfAVarargCall() {
+        assertExpanded(
+            usage = "<caret>target(1, \"a\", \"b\")",
+            declarations = "fun target(id: Int, vararg names: String): Boolean = true",
+            expected = """
+                target(
+                    id = 1,
+                    names = *arrayOf("a", "b"),
+                )
+            """.normalize(),
+        )
+    }
+
+    fun testStubsAVarargThatGotNoArgument() {
+        assertExpanded(
+            usage = "<caret>target(1)",
+            declarations = "fun target(id: Int, vararg names: String): Boolean = true",
+            expected = """
+                target(
+                    id = 1,
+                    names = *emptyArray(),
+                )
+            """.normalize(),
+        )
+    }
+
+    // A lone spread already is the array the vararg needs, so it is reused instead of wrapped.
+    fun testKeepsASpreadArgumentAsTheVararg() {
+        assertExpanded(
+            usage = "<caret>target(1, *arrayOf(\"a\", \"b\"))",
+            declarations = "fun target(id: Int, vararg names: String): Boolean = true",
+            expected = """
+                target(
+                    id = 1,
+                    names = *arrayOf("a", "b"),
+                )
+            """.normalize(),
+        )
+    }
+
+    fun testExpandsAVarargBeforeTrailingParameters() {
+        assertExpanded(
+            usage = "<caret>target(\"a\", \"b\")",
+            declarations = "fun target(vararg names: String, active: Boolean = false): Boolean = true",
+            expected = """
+                target(
+                    names = *arrayOf("a", "b"),
+                    active = false,
+                )
+            """.normalize(),
+        )
+    }
+
+    // `target { }` has no valueArgumentList, so there is nothing for process() to rewrite; the row
+    // must not appear at all instead of doing nothing.
+    fun testIsNotAvailableForACallWithoutAnArgumentList() {
+        assertAvailable(
+            usage = "<caret>target { }",
+            declarations = "fun target(id: Int = 0, block: () -> Unit): Boolean = true",
+            expected = false,
+        )
+    }
+
+    // The trailing lambda is a child of the call, not an entry of valueArgumentList. It fills the
+    // last parameter, so that parameter must not be stubbed next to the lambda.
+    fun testKeepsTheTrailingLambdaOutOfTheNamedArguments() {
+        assertExpanded(
+            usage = "<caret>target(1) { }",
+            declarations = "fun target(id: Int, block: () -> Unit): Boolean = true",
+            expected = "target( id = 1, ) { }",
+        )
+    }
+
+    fun testStubsMissingArgumentsNextToATrailingLambda() {
+        assertExpanded(
+            usage = "<caret>target() { }",
+            declarations = "fun target(id: Int, block: () -> Unit): Boolean = true",
+            expected = "target( id = id, ) { }",
+        )
+    }
+
+    fun testIsNotAvailableWhenTheTrailingLambdaIsTheOnlyArgument() {
+        assertAvailable(
+            usage = "<caret>target() { }",
+            declarations = "fun target(block: () -> Unit): Boolean = true",
+            expected = false,
+        )
+    }
+
+    fun testIsNotAvailableWhenEveryArgumentButTheLambdaIsNamed() {
+        assertAvailable(
+            usage = "<caret>target(id = 1) { }",
+            declarations = "fun target(id: Int, block: () -> Unit): Boolean = true",
+            expected = false,
+        )
+    }
+
+    // Positional arguments cannot use the slot the trailing lambda fills.
+    fun testIsNotAvailableWhenPositionalArgumentsDoNotFitBeforeTheLambda() {
+        assertAvailable(
+            usage = "<caret>target(1, 2) { }",
+            declarations = "fun target(id: Int, block: () -> Unit): Boolean = true",
+            expected = false,
+        )
+    }
+
+    fun testNamesArgumentsBeforeAVarargThatTakesTheTrailingLambda() {
+        assertExpanded(
+            usage = "<caret>target(1) { }",
+            declarations = "fun target(id: Int, vararg blocks: () -> Unit): Boolean = true",
+            expected = "target( id = 1, ) { }",
+        )
+    }
+
+    // The callee is a parameter of function type, so it resolves to the KtParameter. The first
+    // KtParameterList inside it is the one of `(Int, Int) -> Int`, whose parameters are unnamed;
+    // expanding it wrote `target(null = 1, null = 2)`. Kotlin prohibits named arguments for a
+    // value of function type, so there is nothing valid to generate.
+    fun testIsNotAvailableWhenTheCalleeIsAParameterOfFunctionType() {
+        assertAvailable(
+            usage = "true",
+            declarations = "fun applyIt(target: (Int, Int) -> Int): Int = tar<caret>get(1, 2)",
+            expected = false,
+        )
+    }
+
+    // Same for a property initialized with a lambda: the first KtParameterList found belongs to
+    // the lambda, not to the call, and named arguments are rejected for function types.
+    fun testIsNotAvailableWhenTheCalleeIsAPropertyOfFunctionType() {
+        assertAvailable(
+            usage = "true",
+            declarations = """
+                val target = { a: Int, b: Int -> a + b }
+                val other = tar<caret>get(1, 2)
+            """.trimIndent(),
+            expected = false,
+        )
+    }
+
+    // The parser recovers from an incomplete parameter list by leaving a null-named KtParameter
+    // ahead of the real ones (`fun target(, value: Int)` -> [null <>, value]). Without the name
+    // check the expansion writes `null = 1` into the call.
+    fun testIsNotAvailableForADeclarationWithAnUnnamedParameter() {
+        assertAvailable(
+            usage = "<caret>target(1)",
+            declarations = "fun target(, value: Int): Boolean = true",
+            expected = false,
+        )
+    }
+
+    // A Java method resolves to a PsiMethod, which carries no Kotlin parameter names. That is a
+    // known gap of the Kotlin-PSI-only implementation, and refusing it keeps the call untouched.
+    fun testIsNotAvailableForAJavaMethod() {
+        myFixture.addFileToProject(
+            "J.java",
+            "public class J { public void target(int first, int second) {} }",
+        )
+        assertAvailable(usage = "J().tar<caret>get(1, 2)", declarations = "", expected = false)
+    }
+
+    // A Java constructor call resolves to the constructor's PsiMethod as well, not to a KtClass,
+    // so the class branch of the declaration whitelist never sees it.
+    fun testIsNotAvailableForAJavaConstructor() {
+        myFixture.addFileToProject(
+            "J.java",
+            "public class J { public J(int first, int second) {} }",
+        )
+        assertAvailable(usage = "<caret>J(1, 2)", declarations = "", expected = false)
     }
 
     private fun source(usage: String, declarations: String) = """
@@ -459,6 +790,12 @@ class NamedArgumentStubsIntentionTest : BasePlatformTestCase() {
             .first { it.calleeExpression?.text == callee }
             .text.normalize()
 
+    // Whitespace matters here: a raw string default differs from another by the newline inside it.
+    private fun callRawText(callee: String, file: PsiFile = myFixture.file): String =
+        PsiTreeUtil.findChildrenOfType(file, KtCallExpression::class.java)
+            .first { it.calleeExpression?.text == callee }
+            .text
+
     // The intentions preview writes to a detached copy of the file; do the same here.
     private fun preview(usage: String, declarations: String): Pair<IntentionPreviewInfo, String> {
         configure(usage, declarations)
@@ -476,6 +813,10 @@ class NamedArgumentStubsIntentionTest : BasePlatformTestCase() {
     }
 
     private fun String.normalize(): String = replace(Regex("\\s+"), " ").trim()
+
+    // A line comment swallows everything up to the newline, so normalizing all whitespace would
+    // merge it with the next argument; drop only the per-line indentation instead.
+    private fun String.trimIndentPerLine(): String = lines().joinToString("\n") { it.trim() }
 
     // Stands in for the popup: records what was offered and applies the caller's pick.
     private class RecordingChooser(private val pick: (List<Overload>) -> Overload?) : OverloadChooser {
