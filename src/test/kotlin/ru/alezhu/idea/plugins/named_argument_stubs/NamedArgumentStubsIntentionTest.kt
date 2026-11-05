@@ -697,6 +697,16 @@ class NamedArgumentStubsIntentionTest : BasePlatformTestCase() {
         assertAvailable(usage = "J().tar<caret>get(1, 2)", declarations = "", expected = false)
     }
 
+    // A Java constructor call resolves to the constructor's PsiMethod as well, not to a KtClass,
+    // so the class branch of the declaration whitelist never sees it.
+    fun testIsNotAvailableForAJavaConstructor() {
+        myFixture.addFileToProject(
+            "J.java",
+            "public class J { public J(int first, int second) {} }",
+        )
+        assertAvailable(usage = "<caret>J(1, 2)", declarations = "", expected = false)
+    }
+
     private fun source(usage: String, declarations: String) = """
         $declarations
 

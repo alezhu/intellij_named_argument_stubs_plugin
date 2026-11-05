@@ -49,10 +49,13 @@ symptom first, because that is what you will be staring at.
 
 - A Java method or constructor (`J().target(1, 2)`, `J(1, 2)`) resolves to a `PsiMethod`, not a
   Kotlin declaration, so there are no parameter names to generate and the call is left untouched.
-  That is the only known gap of the Kotlin-PSI-only implementation: Kotlin library calls are not
-  excluded. `s.substring(1, 2)` is a `kotlin.text` extension in Kotlin, resolves to a
-  `KtNamedFunction` and expands to `startIndex`/`endIndex` on 2026.2.4; only a genuinely Java method
-  such as `J().target(1, 2)` answers with `PsiMethodImpl` and stays unavailable.
+  Probe on 2026.2.4: both usages resolve a single `PsiMethodImpl` with `isKtClass == false`
+  (`public void target(int first, int second) {}`, `public J(int first, int second) {}`), and
+  `isAvailable()` is false for both; `testIsNotAvailableForAJavaMethod` and
+  `testIsNotAvailableForAJavaConstructor` pin the two halves. That is the only known gap of the
+  Kotlin-PSI-only implementation: Kotlin library calls are not excluded. `s.substring(1, 2)` is a
+  `kotlin.text` extension in Kotlin, resolves to a `KtNamedFunction` and expands to
+  `startIndex`/`endIndex` on 2026.2.4; only a genuinely Java declaration stays unavailable.
 
 - The Kotlin callee reference usually narrows the candidates before any filter of ours runs. A call
   like `target(1, "2")` against `target(id, name, value = 0.0)` + `target(id, title)` resolves to the
