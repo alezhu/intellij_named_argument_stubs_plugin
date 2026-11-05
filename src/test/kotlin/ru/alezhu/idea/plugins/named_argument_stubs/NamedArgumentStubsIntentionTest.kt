@@ -676,6 +676,17 @@ class NamedArgumentStubsIntentionTest : BasePlatformTestCase() {
         )
     }
 
+    // The parser recovers from an incomplete parameter list by leaving a null-named KtParameter
+    // ahead of the real ones (`fun target(, value: Int)` -> [null <>, value]). Without the name
+    // check the expansion writes `null = 1` into the call.
+    fun testIsNotAvailableForADeclarationWithAnUnnamedParameter() {
+        assertAvailable(
+            usage = "<caret>target(1)",
+            declarations = "fun target(, value: Int): Boolean = true",
+            expected = false,
+        )
+    }
+
     // A Java method resolves to a PsiMethod, which carries no Kotlin parameter names. That is a
     // known gap of the Kotlin-PSI-only implementation, and refusing it keeps the call untouched.
     fun testIsNotAvailableForAJavaMethod() {

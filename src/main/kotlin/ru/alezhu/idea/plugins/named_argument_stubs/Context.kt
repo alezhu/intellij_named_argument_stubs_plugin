@@ -261,7 +261,9 @@ class Context(
             is KtClass -> primaryConstructor?.valueParameterList?.parameters
             else -> null
         } ?: return null
-        // A parameter without a name has no argument name to emit.
+        // A parameter without a name has no argument name to emit. Valid Kotlin cannot produce one
+        // here (destructuring is lambda-only); this is the parser's recovery on incomplete source,
+        // e.g. `fun target(, value: Int)` -> [null <>, value].
         return parameters.takeIf { list -> list.all { it.name != null } }
     }
 

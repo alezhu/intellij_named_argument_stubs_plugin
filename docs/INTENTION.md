@@ -25,7 +25,7 @@ symptom first, because that is what you will be staring at.
   resolves the inner `target` to a `KtParameter` whose first list is the `(Int, Int) -> Int` one,
   with unnamed parameters (`target(null = 1, null = 2)`), and `val target = { a: Int, b: Int -> … }`
   resolves to a `KtProperty` whose list belongs to the lambda. Kotlin prohibits named arguments for
-  function types, so both are refused, and so is any declaration with an unnamed parameter. Probe
+  function types, so both are refused by the whitelist — the name check below never sees them. Probe
   evidence: `resolved=[KtParameter] firstList=[null, null]`, `resolved=[KtProperty] firstList=[a, b]`,
   `resolved=[KtPrimaryConstructor] firstList=[id, name]`.
 
@@ -36,6 +36,16 @@ symptom first, because that is what you will be staring at.
   nor 2026.2.4 contains a `KtLightCallableDeclaration` class at all, so the light-declaration theory
   does not explain a refusal on either. The fixture needs the jars attached to show this; see the
   probing notes below.
+
+- `parameters.all { it.name != null }` is not about destructuring: that is allowed in lambda
+  parameters only, and `fun target((first, second): Pair<Int, Int>)` is a syntax error
+  (`Parameter name expected`), so valid Kotlin never yields a `KtNamedFunction` parameter without a
+  name. The check guards the parser's recovery on incomplete source: `fun target(, value: Int)`
+  parses as `params=[name=null text=<>, name=value text=<value: Int>]`
+  (`errors=[Expecting a parameter declaration]`), and the same null entry appears between two commas.
+  Without the check the intention offers an expansion that writes `null = 1`.
+  `testIsNotAvailableForADeclarationWithAnUnnamedParameter` fails without it, so do not delete the
+  branch as dead code.
 
 - A Java method or constructor (`J().target(1, 2)`, `J(1, 2)`) resolves to a `PsiMethod`, not a
   Kotlin declaration, so there are no parameter names to generate and the call is left untouched.
