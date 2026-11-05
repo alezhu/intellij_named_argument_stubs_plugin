@@ -304,5 +304,11 @@ intellijPlatformTesting {
         onMatrixIde("runIdeOnIdeaLatest", IntelliJPlatformType.IntellijIdea, "2026.2.4")
         onMatrixIde("runIdeOnAndroidStudio", IntelliJPlatformType.AndroidStudio, androidStudioRelease)
         onMatrixIde("runIdeOnAndroidStudioCanary", IntelliJPlatformType.AndroidStudio, androidStudioCanary)
+
+        // Runs the developer's installed IDE, so pre-release builds that are not on the installer
+        // CDN can be tried without a second download.
+        register("runIdeOnLocalIdea") {
+            localPath.set(file("C:/Users/alezhur/AppData/Local/Programs/IntelliJ IDEA"))
+        }
     }
 }

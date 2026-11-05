@@ -9,6 +9,26 @@ already narrows the candidates, and the Windows-specific traps that cost real de
 UI harness (`WS_EX_NOREDIRECTIONBITMAP` popups invisible to screen captures, DPI-virtualized rects,
 silent focus loss, sandbox file locks).
 
+## Recording lessons
+
+When a debugging round ends with something the code cannot tell the next session — a platform
+behaviour, an assumption that sent you the wrong way, a probe that settled the question — add it to
+the doc for that area before committing. The intention's lessons live in
+[docs/INTENTION.md](docs/INTENTION.md); start a new `docs/<AREA>.md` only for a distinct area, not
+one file per session.
+
+- Each entry: symptom first (what you see), then the cause, then what to do. Name the evidence — the
+  probe output, the window dump, the test that fails without the fix. Reasoning from API docs alone
+  is not a lesson.
+- Record only what cannot be recovered from the code, git history or upstream documentation. Routine
+  fixes and restatements of the implementation stay out; user-visible effects belong in the changelog.
+- Point to the doc from the relevant section of this file in one or two sentences: when to read it and
+  what it covers. Do not copy entries here — the duplicate goes stale first.
+- Keep entries true: when a change contradicts an entry, rewrite or delete it in the same commit.
+  A stale entry is worse than a missing one, because the next session trusts it.
+- Rewrite an entry instead of appending a correction; two entries that disagree force the reader to
+  date them.
+
 ## Changelog
 
 Update the `[Unreleased]` section of [CHANGELOG.md](CHANGELOG.md) in the same commit as every
