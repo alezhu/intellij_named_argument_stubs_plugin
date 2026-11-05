@@ -103,6 +103,13 @@ symptom first, because that is what you will be staring at.
   `testKeepsACommentBetweenArguments`, `testKeepsLineCommentsThatFollowArguments` and
   `testKeepsACommentInsideAnAlreadyNamedArgument` fail on that earlier code.
 
+- A duplicated argument name loses the earlier one: `namedByName()` keeps the last entry, so
+  `target(id = 1, id = 2)` expands to `target(id = 2, name = …)` and `id = 1` vanishes without a
+  warning. This is the one remaining silent drop in `process()`, kept because the call is invalid
+  Kotlin anyway ("an argument is already passed for this parameter") and only broken code reaches it;
+  availability can still offer the row, since the duplicate counts once and a parameter is left to
+  stub. Do not mistake it for a rewriting bug or "fix" it by refusing the call.
+
 - Slots reference a source argument by its index in one `valueArgumentList.arguments` list, and that
   list is built once per `process()` call and reused for the named/positional lookups. Do not take a
   second snapshot there: `indexOf` on PSI elements is an identity lookup, and it only finds a match
