@@ -52,14 +52,18 @@ abstract class AndroidStudioVersions : ValueSource<Map<String, String>, AndroidS
 
     private fun fetchFeed(): String {
         val client = HttpClient.newBuilder()
-            .connectTimeout(Duration.ofSeconds(30))
+            .connectTimeout(Duration.ofSeconds(15))
             .followRedirects(HttpClient.Redirect.NORMAL)
             .build()
         val request = HttpRequest.newBuilder(URI.create(FEED))
-            .timeout(Duration.ofMinutes(2))
+            .timeout(Duration.ofSeconds(20))
             .GET()
             .build()
-        return client.send(request, HttpResponse.BodyHandlers.ofString()).body()
+        val response = client.send(request, HttpResponse.BodyHandlers.ofString())
+        // An error page has a real body, so without this check it parses as "no versions" and the
+        // pinned fallback silently hides a broken feed.
+        if (response.statusCode() != 200) throw IOException("HTTP ${response.statusCode()} from $FEED")
+        return response.body()
     }
 
     // The feed is newest-first, so the first item of a channel is its newest build.
