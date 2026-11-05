@@ -329,21 +329,16 @@ class NamedArgumentStubsIntentionTest : BasePlatformTestCase() {
         assertNull("No choice offered for an unambiguous call", chooser.offered)
     }
 
-    // An argument name that exists in neither overload leaves the frontend with one
-    // closest candidate; the intention follows it instead of refusing outright.
-    fun testExpandsToTheCandidateLeftWhenNoOverloadMatchesTheNames() {
-        assertExpanded(
+    // An argument name that exists in neither overload still leaves the frontend with one closest
+    // candidate. Following it would rewrite the list without `unknown = "2"`, so the row stays out.
+    fun testIsNotAvailableWhenANamedArgumentMatchesNoParameter() {
+        assertAvailable(
             usage = "<caret>target(1, unknown = \"2\")",
             declarations = """
                 fun target(id: Int, name: String, value: Double = 0.0): Boolean = true
                 fun target(id: Int, title: String): Boolean = false
             """.trimIndent(),
-            expected = """
-                target(
-                    id = 1,
-                    title = title,
-                )
-            """.normalize(),
+            expected = false,
         )
     }
 

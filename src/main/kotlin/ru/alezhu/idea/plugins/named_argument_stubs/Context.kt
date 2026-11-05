@@ -81,34 +81,30 @@ class Context(
      * Declarations the call can be expanded against. A single one is applied without asking,
      * several mean the user has to pick, none means the intention does not apply.
      *
-     * The fit is judged from the call shape alone — arity always, the names actually present only
-     * while the frontend still leaves a choice. Positional arguments fill the leading parameters
-     * (a vararg takes all the rest), a trailing lambda keeps the last one, and the parameters left
-     * without an argument are the ones to be stubbed. Types are not compared, so an overload that
-     * differs only by argument types stays a candidate and reaches the chooser instead of being
-     * silently guessed.
+     * The fit is judged from the call shape alone — arity and the names actually present, even when
+     * the frontend already leaves a single candidate. Positional arguments fill the leading
+     * parameters (a vararg takes all the rest), a trailing lambda keeps the last one, and the
+     * parameters left without an argument are the ones to be stubbed. Types are not compared, so an
+     * overload that differs only by argument types stays a candidate and reaches the chooser
+     * instead of being silently guessed.
      */
     fun expansionTargets(): List<Overload> {
         if (tooManyTrailingLambdas) return emptyList()
-        val candidates = overloads
         val split = positionalArguments.size
         val lambdaSlots = if (trailingLambda != null) 1 else 0
-        // Arity applies even to the single candidate the frontend leaves: a declaration that cannot
-        // take every positional argument would make process() drop the extras in silence. A leading
-        // vararg absorbs any number of them. The trailing lambda reserves the last parameter, so
-        // positional arguments may fill only the ones before it.
-        val fitting = candidates.filter { overload ->
+        // Both checks apply even to the single candidate the frontend leaves: a declaration that
+        // cannot take every positional argument, or a named argument that names no parameter of it,
+        // would make process() drop the argument in silence. A leading vararg absorbs any number of
+        // positional ones. The trailing lambda reserves the last parameter, so positional arguments
+        // may fill only the ones before it.
+        return overloads.filter { overload ->
             val parameters = overload.parameters
             // A parameter already filled by name takes no positional argument, and a vararg filled
             // by name absorbs none either, so only the free parameters are slots for them.
             val positionalTargets = parameters.dropLast(lambdaSlots).filter { it.name !in namedArguments }
             parameters.size >= lambdaSlots &&
-                (positionalTargets.any { it.isVarArg } || positionalTargets.size >= split)
-        }
-        if (candidates.size <= 1) return fitting
-
-        return fitting.filter { overload ->
-            namedArguments.keys.all { name -> overload.parameters.any { it.name == name } }
+                (positionalTargets.any { it.isVarArg } || positionalTargets.size >= split) &&
+                namedArguments.keys.all { name -> parameters.any { it.name == name } }
         }
     }
 

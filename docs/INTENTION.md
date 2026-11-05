@@ -69,9 +69,11 @@ symptom first, because that is what you will be staring at.
   only the *free* parameters as slots: a parameter already filled by name takes no positional
   argument, so `target(id = 1, "2", 3.0)` against the same `target(id, name)` must be refused too
   (`testIsNotAvailableWhenANamedArgumentLeavesTooFewSlotsForPositionalOnes`). The argument name
-  filter, unlike arity, may stay chooser-only: with one candidate the frontend has already picked
-  the closest declaration, and a name absent from it keeps the stubs on that declaration
-  (`testExpandsToTheCandidateLeftWhenNoOverloadMatchesTheNames`).
+  check runs on a single candidate for the same reason: `target(1, unknown = "2")` also resolves to
+  one declaration, and rebuilding the list without `unknown` loses the argument, so the call is
+  refused instead of expanded through the declaration the frontend picked
+  (`testIsNotAvailableWhenANamedArgumentMatchesNoParameter`). A single candidate says nothing about
+  the arguments being valid for it — only that they are the closest fit.
 
 - A vararg parameter not filled by name absorbs any number of positional arguments, so its
   declaration never fails the arity check. `process()` moves the extras into `name = *arrayOf(...)`
@@ -109,7 +111,8 @@ symptom first, because that is what you will be staring at.
 
 - A duplicated argument name loses the earlier one: `namedByName()` keeps the last entry, so
   `target(id = 1, id = 2)` expands to `target(id = 2, name = …)` and `id = 1` vanishes without a
-  warning. This is the one remaining silent drop in `process()`, kept because the call is invalid
+  warning. With a named argument that matches no parameter refused before `process()` (see above),
+  this is the one remaining silent drop in `process()`. It is kept because the call is invalid
   Kotlin anyway ("an argument is already passed for this parameter") and only broken code reaches it;
   availability can still offer the row, since the duplicate counts once and a parameter is left to
   stub. Do not mistake it for a rewriting bug or "fix" it by refusing the call.
