@@ -6,6 +6,8 @@ import com.intellij.openapi.command.CommandEvent
 import com.intellij.openapi.command.CommandListener
 import com.intellij.openapi.command.WriteCommandAction
 import com.intellij.openapi.editor.Editor
+import com.intellij.openapi.project.IndexNotReadyException
+import com.intellij.openapi.project.Project
 import com.intellij.psi.PsiDocumentManager
 import com.intellij.psi.PsiElement
 import com.intellij.psi.PsiFile
@@ -414,6 +416,22 @@ class NamedArgumentStubsIntentionTest : BasePlatformTestCase() {
 
         assertSame(IntentionPreviewInfo.EMPTY, info)
         assertEquals("target(1, \"2\")", previewed)
+    }
+
+    // The row is offered after isAvailable() resolved, but indexing can start again before the
+    // preview body runs. The panel disappears instead of the exception escaping out of the popup.
+    fun testPreviewsNothingWhenTheIndexIsNotReady() {
+        configure("<caret>target(1, \"2\")")
+        val copy = IntentionPreviewUtils.obtainCopyForPreview(myFixture.file)
+        val intention = NamedArgumentStubsIntention()
+        intention.previewBody = { _, _, _ -> throw IndexNotReadyException.create() }
+
+        lateinit var info: IntentionPreviewInfo
+        IntentionPreviewUtils.previewSession(myFixture.editor) {
+            info = intention.generatePreview(project, myFixture.editor, copy)
+        }
+
+        assertSame(IntentionPreviewInfo.EMPTY, info)
     }
 
     fun testLeavesTheOriginalCallUntouchedWhenPreviewing() {

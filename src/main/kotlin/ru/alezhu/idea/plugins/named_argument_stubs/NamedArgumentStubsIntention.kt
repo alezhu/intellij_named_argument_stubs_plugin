@@ -66,6 +66,20 @@ class NamedArgumentStubsIntention : PsiElementBaseIntentionAction(), IntentionAc
      * With several fitting overloads the chooser lists them, so previewing one would be a guess.
      */
     override fun generatePreview(project: Project, editor: Editor, file: PsiFile): IntentionPreviewInfo {
+        // The row is only offered after isAvailable() succeeded, but indexing can start again
+        // before the body runs; drop the preview rather than throw out of the popup.
+        return try {
+            previewBody(project, editor, file)
+        } catch (ex: IndexNotReadyException) {
+            IntentionPreviewInfo.EMPTY
+        }
+    }
+
+    // Swapped in tests to fail the body the way a re-index does: the platform has no way to start
+    // indexing on demand between isAvailable() and this call.
+    internal var previewBody: (Project, Editor, PsiFile) -> IntentionPreviewInfo = ::computePreview
+
+    private fun computePreview(project: Project, editor: Editor, file: PsiFile): IntentionPreviewInfo {
         val element = getElement(editor, file) ?: return IntentionPreviewInfo.EMPTY
         val context = Context(project, element)
         val targets = context.expansionTargets()

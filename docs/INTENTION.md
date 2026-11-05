@@ -190,6 +190,13 @@ symptom first, because that is what you will be staring at.
 - The preview panel can be hidden until the user presses Ctrl+Q ("Press Ctrl+Q to toggle preview" in the
   popup footer). That is platform behaviour and applies to stock intentions too — not a plugin bug.
 
+- Dumb mode cannot reproduce a preview failure: inside `DumbModeTestUtils.runInDumbModeSynchronously`
+  Kotlin resolution returns no candidates instead of throwing `IndexNotReadyException` — with the
+  callee in the same file and in another one — so `generatePreview` returns `EMPTY` for the wrong
+  reason and the test passes without the guard. That is why the body sits behind the `previewBody`
+  seam: the test throws `IndexNotReadyException.create()` from it and fails with the exception when
+  the catch in `generatePreview` is removed.
+
 ## Popup placement and lifetime
 
 - `show(RelativePoint.getSouthWestOf(editor.contentComponent))` anchors the popup to the bottom of the
