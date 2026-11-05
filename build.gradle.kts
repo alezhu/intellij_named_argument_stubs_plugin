@@ -10,6 +10,7 @@ import java.net.http.HttpClient
 import java.net.http.HttpRequest
 import java.net.http.HttpResponse
 import java.time.Duration
+import java.util.Properties
 
 fun properties(key: String) = providers.gradleProperty(key)
 fun environment(key: String) = providers.environmentVariable(key)
@@ -266,6 +267,17 @@ tasks {
 }
 
 
+// `runIdeOnLocalIdea` runs the developer's installed IDE, so pre-release builds that are not on the
+// installer CDN can be tried without a second download. The path cannot be committed, so it comes
+// from -PlocalIdeaPath or `localIdeaPath=` in the untracked local.properties; without it the task is
+// not registered at all, so CI and other machines do not get a task that can only fail on a missing
+// installation.
+val localIdeaPath: Provider<String> = properties("localIdeaPath").orElse(
+    providers.fileContents(layout.projectDirectory.file("local.properties")).asText.map { text ->
+        Properties().apply { load(text.reader()) }.getProperty("localIdeaPath").orEmpty()
+    },
+).map { it.trim() }
+
 intellijPlatformTesting {
     runIde {
         register("runIdeForUiTests") {
@@ -305,10 +317,10 @@ intellijPlatformTesting {
         onMatrixIde("runIdeOnAndroidStudio", IntelliJPlatformType.AndroidStudio, androidStudioRelease)
         onMatrixIde("runIdeOnAndroidStudioCanary", IntelliJPlatformType.AndroidStudio, androidStudioCanary)
 
-        // Runs the developer's installed IDE, so pre-release builds that are not on the installer
-        // CDN can be tried without a second download.
-        register("runIdeOnLocalIdea") {
-            localPath.set(file("C:/Users/alezhur/AppData/Local/Programs/IntelliJ IDEA"))
+        localIdeaPath.orNull?.takeIf { it.isNotEmpty() }?.let { path ->
+            register("runIdeOnLocalIdea") {
+                localPath.set(file(path))
+            }
         }
     }
 }
