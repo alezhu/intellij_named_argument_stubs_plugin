@@ -65,16 +65,20 @@ symptom first, because that is what you will be staring at.
 
 - Arity must be checked even when the frontend leaves a single candidate. Returning that candidate
   untouched made `target(1, "2", 3.0)` against the only `target(id, name)` report available, and
-  `process()` rewrote the argument list without the third argument — silent data loss. The argument
-  name filter, unlike arity, may stay chooser-only: with one candidate the frontend has already
-  picked the closest declaration, and a name absent from it keeps the stubs on that declaration
+  `process()` rewrote the argument list without the third argument — silent data loss. Arity counts
+  only the *free* parameters as slots: a parameter already filled by name takes no positional
+  argument, so `target(id = 1, "2", 3.0)` against the same `target(id, name)` must be refused too
+  (`testIsNotAvailableWhenANamedArgumentLeavesTooFewSlotsForPositionalOnes`). The argument name
+  filter, unlike arity, may stay chooser-only: with one candidate the frontend has already picked
+  the closest declaration, and a name absent from it keeps the stubs on that declaration
   (`testExpandsToTheCandidateLeftWhenNoOverloadMatchesTheNames`).
 
-- A vararg parameter absorbs any number of positional arguments, so its declaration never fails the
-  arity check. `process()` moves the extras into `name = *arrayOf(...)` and emits `*emptyArray()`
-  when the vararg got nothing (both infer their type from the parameter). Two PSI facts cost a probe
-  each: `KtValueArgument.getArgumentExpression()` returns the expression *without* the spread's `*`
-  (`getSpreadElement()` is what marks it), and a vararg passed by name must carry the spread —
+- A vararg parameter not filled by name absorbs any number of positional arguments, so its
+  declaration never fails the arity check. `process()` moves the extras into `name = *arrayOf(...)`
+  and emits `*emptyArray()` when the vararg got nothing (both infer their type from the parameter).
+  Two PSI facts cost a probe each: `KtValueArgument.getArgumentExpression()` returns the expression
+  *without* the spread's `*` (`getSpreadElement()` is what marks it), and a vararg passed by name
+  must carry the spread —
   `names = "a"` is rejected with "Assigning single elements to varargs in named form is prohibited".
 
 - Availability must never be stricter than the purpose of the intention. Requiring every parameter not

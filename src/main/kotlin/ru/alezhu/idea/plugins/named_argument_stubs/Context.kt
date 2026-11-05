@@ -99,7 +99,9 @@ class Context(
         // positional arguments may fill only the ones before it.
         val fitting = candidates.filter { overload ->
             val parameters = overload.parameters
-            val positionalTargets = parameters.dropLast(lambdaSlots)
+            // A parameter already filled by name takes no positional argument, and a vararg filled
+            // by name absorbs none either, so only the free parameters are slots for them.
+            val positionalTargets = parameters.dropLast(lambdaSlots).filter { it.name !in namedArguments }
             parameters.size >= lambdaSlots &&
                 (positionalTargets.any { it.isVarArg } || positionalTargets.size >= split)
         }

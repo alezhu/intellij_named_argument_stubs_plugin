@@ -474,6 +474,26 @@ class NamedArgumentStubsIntentionTest : BasePlatformTestCase() {
         )
     }
 
+    // The named argument occupies `id`, so `name` is the only slot left for the two positional
+    // arguments. Counting every parameter as a slot offered the expansion and dropped `2`.
+    fun testIsNotAvailableWhenANamedArgumentLeavesTooFewSlotsForPositionalOnes() {
+        assertAvailable(
+            usage = "<caret>target(id = 1, \"2\", 3.0)",
+            declarations = "fun target(id: Int, name: String): Boolean = true",
+            expected = false,
+        )
+    }
+
+    // Same shape with the positional arguments first: `id` is taken by name, so one of `1` and `2`
+    // has nowhere to go.
+    fun testIsNotAvailableWhenAPositionalArgumentFillsNoSlotAfterANamedOne() {
+        assertAvailable(
+            usage = "<caret>target(1, 2, id = 3)",
+            declarations = "fun target(id: Int, name: String): Boolean = true",
+            expected = false,
+        )
+    }
+
     fun testKeepsACommentBetweenArguments() {
         assertExpanded(
             usage = "<caret>target(1, /* name */ \"2\")",
