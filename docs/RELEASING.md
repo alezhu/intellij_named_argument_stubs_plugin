@@ -17,6 +17,18 @@ Bump `pluginVersion` by hand. Do not reintroduce build-time version mutation: re
 `gradle.properties` from the configuration phase breaks the configuration cache and desynchronizes
 artifact names from the patched `plugin.xml`.
 
+### Which segment to raise
+
+Read `[Unreleased]` before choosing, not the previous example:
+
+- **A (major)** — a release that breaks users already on the plugin: dropping an IDE version they
+  can currently install into, or changing the expansion so existing code must be rewritten.
+- **B (minor)** — the section has an `Added` entry that gives users a capability they did not have.
+- **C (patch)** — only `Fixed` entries and compatibility updates with no new capability.
+
+When unsure, ask: could a user do something after this release that they could not do before? If
+yes, it is minor.
+
 ## Local development
 
 Nothing to do. `./gradlew buildPlugin` produces the same `…-A.B.C.SNAPSHOT.zip` and overwrites it,

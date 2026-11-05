@@ -10,6 +10,10 @@
 - Preview the expansion in the intention popup when exactly one overload fits.
 - Support functions with a `vararg` parameter.
 
+### Changed
+
+- Keep installing into newer IDE releases: the plugin no longer has an upper IDE version limit.
+
 ### Fixed
 
 - Do not offer the intention for a call without a parenthesised argument list (`target { }`).
