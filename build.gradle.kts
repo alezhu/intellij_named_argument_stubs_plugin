@@ -59,11 +59,18 @@ abstract class AndroidStudioVersions : ValueSource<Map<String, String>, AndroidS
             .timeout(Duration.ofSeconds(20))
             .GET()
             .build()
-        val response = client.send(request, HttpResponse.BodyHandlers.ofString())
-        // An error page has a real body, so without this check it parses as "no versions" and the
-        // pinned fallback silently hides a broken feed.
-        if (response.statusCode() != 200) throw IOException("HTTP ${response.statusCode()} from $FEED")
-        return response.body()
+        try {
+            val response = client.send(request, HttpResponse.BodyHandlers.ofString())
+            // An error page has a real body, so without this check it parses as "no versions" and
+            // the pinned fallback silently hides a broken feed.
+            if (response.statusCode() != 200) throw IOException("HTTP ${response.statusCode()} from $FEED")
+            return response.body()
+        } finally {
+            // The Kotlin DSL compiles this script against the Java 17 API, where HttpClient is not
+            // AutoCloseable yet (it became one in 21), hence the cast. Left open, it keeps its
+            // selector thread alive in the daemon between builds.
+            (client as? AutoCloseable)?.close()
+        }
     }
 
     // The feed is newest-first, so the first item of a channel is its newest build.
